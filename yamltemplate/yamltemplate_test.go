@@ -254,6 +254,15 @@ list:
 			replacements: map[interface{}]interface{}{"addressee": "world\n- inject"},
 			err:          template.ErrYAMLInjection,
 		},
+
+		// Accessing anchors should count as injected YAML syntax
+		{
+			tmplText: `{ secret: &secret_label 'test', disclosed: {{ .controlled }}  }`,
+			replacements: map[interface{}]interface{}{
+				"controlled": "*secret_label",
+			},
+			err: template.ErrYAMLInjection,
+		},
 	}
 
 	for _, tc := range testCases {
