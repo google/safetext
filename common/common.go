@@ -32,6 +32,10 @@ import (
 
 // ContainsStringsWithSpecialCharacters determines whether an object contains interface{} strings that contain special characters.
 func ContainsStringsWithSpecialCharacters(data interface{}, special string) bool {
+	if data == nil {
+		return false
+	}
+
 	switch reflect.TypeOf(data).Kind() {
 	case reflect.Ptr:
 		p := reflect.ValueOf(data)
@@ -113,6 +117,10 @@ func dereference(data interface{}) interface{} {
 
 func deepCopyMutateStrings(data interface{}, mutateF func(string) string) interface{} {
 	var r interface{}
+
+	if data == nil {
+		return nil
+	}
 
 	switch reflect.TypeOf(data).Kind() {
 	case reflect.Ptr:

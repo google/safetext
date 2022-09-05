@@ -198,6 +198,16 @@ list:
 			err: nil,
 		},
 
+		// nil type
+		{
+			tmplText: `{ a: {{.a}}, b: '{{.b}}' }`,
+			replacements: map[interface{}]interface{}{
+				"a": nil,
+				"b": "{}",
+			},
+			err: nil,
+		},
+
 		// Positive cases
 		{
 			tmplText: "{ hello: \"{{ .addressee }}\" }",
