@@ -24,6 +24,7 @@ import (
 	//"text/template"
 	template "github.com/google/safetext/yamltemplate"
 
+	"os"
 	"bytes"
 	"fmt"
 	"strconv"
@@ -385,7 +386,24 @@ func TestSafetextYamltemplatePositiveIndirection(t *testing.T) {
 
 // Check parsing files works
 func TestSafetextYamltemplateFiles(t *testing.T) {
-	tmpl, _ := template.ParseFiles("testdata/list.yaml.tmpl")
+	tmplText := `list:
+{{with .some_field}}
+{{if eq . "x"}}
+- {{.}}
+{{end}}
+{{end}}
+`
+	f, err := os.CreateTemp("", "list.yaml.tmpl")
+	if err != nil {
+		t.Errorf("os.CreateTemp() error = %v", err)
+	}
+	defer os.Remove(f.Name())
+
+	if _, err = f.WriteString(tmplText); err != nil {
+		 t.Errorf("f.WriteString() error = %v", err)
+	}
+
+	tmpl, _ := template.ParseFiles(f.Name())
 
 	replacements := map[string]interface{}{
 		"some_field":    "x",
@@ -393,7 +411,7 @@ func TestSafetextYamltemplateFiles(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	err := tmpl.Execute(&buf, replacements)
+	err = tmpl.Execute(&buf, replacements)
 	if err != nil {
 		t.Errorf("tmpl.Execute() error = %v", err)
 	}
