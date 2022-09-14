@@ -74,40 +74,37 @@ By instead switching from `text/template `to `safetext/yamltemplate`, the inject
 Error: YAML Injection Detected
 ```
 
-## Unsupported use-cases common to all formats:
+## Supported formats
 
--   Escaping logic outside of the templating system. Instead, you should
-    annotate the escaping logic into your template (EG: `.UntrustedField |
-    escape`).
+### yamltemplate
 
--   Data accessed indirectly (private struct fields, or string table lookups).
-    The libraries do not scan private struct fields, so if you expose them
-    indirectly (EG: `.Object | GetPrivateString`) you will not be protected
-    against a potential injection. Similarly, accessing data through a string
-    table lookup function (EG: `{{ (GetAssociatedObjectWithName .Name) | GetY
-    }}`) is unsupported for the additional reason that the libraries work by
-    performing executions with mutated string inputs.
+The intention of `yamltemplate` is to ensure that by-default none of the strings in the input data affect the structure of the resultant YAML (just the values).
 
--   Functions with side effects. The libraries work by performing multiple
-    template executions, so if you register functions that have side effects,
-    this could cause unexpected behaviour (EG: `id: {{ AllocateID }}`).
+- For example, the below template would be compatible with yamltemplate as-is, whilst automatically preventing any injections from the `Name` input:
 
--   Partial formats. The libraries are designed to be used for generating
-    complete files. If you generate segments and then concatenate them together,
-    you should instead move this logic into the templating system itself (using
-    constructs like `if` or `range`).
+        name: {{.Name}}
 
-To opt-out specific variables from injection detection, you can use the special
-function, `StructuralData`, which will leave all direct arguments as-is. For
-example:
+- However, any template nodes that _are_ expected to change the resultant YAML structure, such as inserting arbitrary YAML config, would need to be annotated explicitly as `StructuralData`:
 
-```
-{ Person-{{ (StructuralData .Name) }}: {{ .Age }} }
-```
+        config: {{ (StructuralData .Config) }}
 
-## yamltemplate
+- Another case of needing the `StructuralData` annotation would be if you have a key name that depends on an input string:
 
-Unsupported use cases:
+        {{ (StructuralData .Name) }}-age: {{ .Age }}
+
+- It is recommended to make full use of `text/template` features like conditional expressions, range loops, etc to avoid the `StructuralData` annotation where possible. For example, instead of:
+
+        properties:
+            {{ (StructuralData .PropertiesYaml) }}
+
+    Consider:
+
+    ```
+    properties:{{ range .Properties }}
+        - {{ . }}{{ end }}
+    ```
+
+#### Unsupported use cases for yamltemplate
 
 -   YAML with duplicate keys. Duplicate keys are non-standard YAML, and not supported by this library.
     Please refactor your YAML template to remove duplicate keys. For example:
@@ -124,3 +121,26 @@ Unsupported use cases:
     - project:
       members: member-b
     ```
+
+## Unsupported use-cases common to all formats:
+
+-   Escaping logic outside of the templating system. Instead, you should
+    annotate the escaping logic into your template (EG: `.UntrustedField |
+    escape`).
+
+-   Partial formats. The libraries are designed to be used for generating
+    complete files. If you generate segments and then concatenate them together,
+    you should instead move this logic into the templating system itself (using
+    constructs like `if` or `range`).
+
+-   Data accessed indirectly (private struct fields, or string table lookups).
+    The libraries do not scan private struct fields, so if you expose them
+    indirectly (EG: `.Object | GetPrivateString`) you will not be protected
+    against a potential injection. Similarly, accessing data through a string
+    table lookup function (EG: `{{ (GetAssociatedObjectWithName .Name) | GetY
+    }}`) is unsupported for the additional reason that the libraries work by
+    performing executions with mutated string inputs.
+
+-   Functions with side effects. The libraries work by performing multiple
+    template executions, so if you register functions that have side effects,
+    this could cause unexpected behaviour (EG: `id: {{ AllocateID }}`).
