@@ -67,7 +67,7 @@ With `text/template`, no errors will be encountered when this happens, and the p
 { hello: world, oops: true }
 ```
 
-By instead switching from `text/template `to `safetext/yamltemplate`, the injection would have been prevented, with the output instead being:
+By instead switching from `text/template` to `safetext/yamltemplate`, the injection would have been prevented, with the output instead being:
 
 ```
 { hello: safe }
