@@ -22,7 +22,6 @@ package common
 import (
 	"bytes"
 	"reflect"
-	"strings"
 	"sync"
 	"text/template"
 	"text/template/parse"
@@ -30,50 +29,12 @@ import (
 	"unicode/utf8"
 )
 
-// ContainsStringsWithSpecialCharacters determines whether an object contains interface{} strings that contain special characters.
-func ContainsStringsWithSpecialCharacters(data interface{}, special string) bool {
-	if data == nil {
-		return false
-	}
-
-	switch reflect.TypeOf(data).Kind() {
-	case reflect.Ptr:
-		p := reflect.ValueOf(data)
-		return !p.IsNil() && ContainsStringsWithSpecialCharacters(p.Elem().Interface(), special)
-	case reflect.String:
-		return strings.ContainsAny(reflect.ValueOf(data).String(), special)
-	case reflect.Slice, reflect.Array:
-		for i := 0; i < reflect.ValueOf(data).Len(); i++ {
-			if ContainsStringsWithSpecialCharacters(reflect.ValueOf(data).Index(i).Interface(), special) {
-				return true
-			}
-		}
-	case reflect.Map:
-		dataIter := reflect.ValueOf(data).MapRange()
-		for dataIter.Next() {
-			if ContainsStringsWithSpecialCharacters(dataIter.Value().Interface(), special) {
-				return true
-			}
-		}
-	case reflect.Struct:
-		t := reflect.TypeOf(data)
-		v := reflect.ValueOf(data)
-		n := v.NumField()
-		for i := 0; i < n; i++ {
-			r, _ := utf8.DecodeRuneInString(t.Field(i).Name)
-			if unicode.IsUpper(r) && ContainsStringsWithSpecialCharacters(v.Field(i).Interface(), special) {
-				return true
-			}
-		}
-	}
-
-	return false
-}
+const textTemplateRemediationFuncName = "ApplyInjectionDetection"
 
 // FuncMap to register new template objects with.
-var FuncMap = map[string]interface{}{
-	"textTemplateRemediationFunc": textTemplateRemediationFunc,
-	"StructuralData":              echo,
+var FuncMap = map[string]any{
+	textTemplateRemediationFuncName: textTemplateRemediationFunc,
+	"StructuralData":                echo,
 }
 
 func echo(in interface{}) interface{} {
@@ -178,8 +139,6 @@ func deepCopyMutateStrings(data interface{}, mutateF func(string) string) interf
 }
 
 func applyPipeCmds(cmds []*parse.CommandNode) {
-	applyFunc := "textTemplateRemediationFunc"
-
 	for _, c := range cmds {
 		newArgs := make([]parse.Node, 0)
 		for i, a := range c.Args {
@@ -201,7 +160,12 @@ func applyPipeCmds(cmds []*parse.CommandNode) {
 					newPipe := &parse.PipeNode{NodeType: parse.NodePipe, Decl: nil}
 					newPipe.Cmds = []*parse.CommandNode{
 						&parse.CommandNode{NodeType: parse.NodeCommand, Args: []parse.Node{a}},
-						&parse.CommandNode{NodeType: parse.NodeCommand, Args: []parse.Node{&parse.IdentifierNode{NodeType: parse.NodeIdentifier, Ident: applyFunc}}},
+						&parse.CommandNode{NodeType: parse.NodeCommand, Args: []parse.Node{
+							&parse.IdentifierNode{
+								NodeType: parse.NodeIdentifier,
+								Ident:    textTemplateRemediationFuncName,
+							},
+						}},
 					}
 					newArgs = append(newArgs, newPipe)
 				}

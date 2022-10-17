@@ -78,8 +78,6 @@ func New(name string) *Template {
 	return &Template{unsafeTemplate: template.New(name).Funcs(common.FuncMap)}
 }
 
-const yamlSpecialCharacters = "{}[]&*#?|-.<>=!%@:\"'`,\r\n"
-
 func mapOrArray(in interface{}) bool {
 	return in != nil && (reflect.TypeOf(in).Kind() == reflect.Map || reflect.TypeOf(in).Kind() == reflect.Slice || reflect.TypeOf(in).Kind() == reflect.Array)
 }
@@ -235,13 +233,6 @@ func (t *Template) Execute(wr io.Writer, data interface{}) (err error) {
 
 	if err := t.unsafeTemplate.Execute(&requestedResult, data); err != nil {
 		return err
-	}
-
-	// Fast path for if there are no YAML special characters in the input strings
-	if !common.ContainsStringsWithSpecialCharacters(data, yamlSpecialCharacters) {
-		// Note: We assume the result was valid YAML, and don't check for ErrInvalidYAMLTemplate
-		requestedResult.WriteTo(wr)
-		return nil
 	}
 
 	walked, err := t.unsafeTemplate.Clone()

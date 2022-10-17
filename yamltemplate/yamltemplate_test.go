@@ -277,7 +277,7 @@ list:
 	}
 
 	for _, tc := range testCases {
-		tmpl, _ := template.New("test").Parse(tc.tmplText)
+		tmpl := template.Must(template.New("test").Parse(tc.tmplText))
 		var buf bytes.Buffer
 		err := tmpl.Execute(&buf, tc.replacements)
 
@@ -301,7 +301,9 @@ func TestSafetextYamltemplateNegativeFuncMap(t *testing.T) {
 		"sanitize": sanitize,
 	}
 
-	tmpl, _ := template.New("test").Funcs(template.FuncMap(funcMap)).Parse("{ a: {{ .a | sanitize }}, b: {{ .b | sanitize }} }")
+	tmpl := template.Must(template.New("test").Funcs(template.FuncMap(funcMap)).Parse(
+		"{ a: {{ .a | sanitize }}, b: {{ .b | sanitize }} }",
+	))
 
 	replacements := map[string]interface{}{
 		"a": "world\", inject: \"oops",
@@ -317,7 +319,9 @@ func TestSafetextYamltemplateNegativeFuncMap(t *testing.T) {
 
 // Check structs, instead of maps
 func TestSafetextYamltemplateNegativeStruct(t *testing.T) {
-	tmpl, _ := template.New("test").Parse("{ name: {{ .Name }}, age: {{ .Age }} }")
+	tmpl := template.Must(template.New("test").Parse(
+		"{ name: {{ .Name }}, age: {{ .Age }} }",
+	))
 
 	type person struct {
 		Name string
@@ -332,7 +336,9 @@ func TestSafetextYamltemplateNegativeStruct(t *testing.T) {
 }
 
 func TestSafetextYamltemplatePositiveStruct(t *testing.T) {
-	tmpl, _ := template.New("test").Parse("{ name: {{ .Name }}, age: {{ .Age }} }")
+	tmpl := template.Must(template.New("test").Parse(
+		"{ name: {{ .Name }}, age: {{ .Age }} }",
+	))
 
 	type person struct {
 		Name string
@@ -348,10 +354,10 @@ func TestSafetextYamltemplatePositiveStruct(t *testing.T) {
 
 // Root node being a list instead of a map
 func TestSafetextYamltemplateNegativeRootList(t *testing.T) {
-	tmpl, _ := template.New("test").Parse(`
+	tmpl := template.Must(template.New("test").Parse(`
 - one: a
 - one: b
-`)
+`))
 
 	replacements := map[string]interface{}{
 		"some_field":    "x",
@@ -367,7 +373,9 @@ func TestSafetextYamltemplateNegativeRootList(t *testing.T) {
 
 // Check indirect types are followed
 func TestSafetextYamltemplatePositiveIndirection(t *testing.T) {
-	tmpl, _ := template.New("test").Parse("{ name: {{ .Name }}, age: {{ .Age }} }")
+	tmpl := template.Must(template.New("test").Parse(
+		"{ name: {{ .Name }}, age: {{ .Age }} }",
+	))
 
 	type person struct {
 		Name **string
@@ -403,7 +411,7 @@ func TestSafetextYamltemplateFiles(t *testing.T) {
 		 t.Errorf("f.WriteString() error = %v", err)
 	}
 
-	tmpl, _ := template.ParseFiles(f.Name())
+	tmpl := template.Must(template.ParseFiles(f.Name()))
 
 	replacements := map[string]interface{}{
 		"some_field":    "x",
@@ -424,7 +432,9 @@ type A struct {
 func (A) GetName(n int) string { return "n is " + strconv.Itoa(n) }
 
 func TestSafetextYamltemplateMethod(t *testing.T) {
-	tmpl, _ := template.New("test").Parse(`- {{ (.a.GetName 0x41) | js }}`)
+	tmpl := template.Must(template.New("test").Parse(
+		`- {{ (.a.GetName 0x41) | js }}`,
+	))
 
 	replacements := map[string]interface{}{
 		"a":             A{},
@@ -443,7 +453,9 @@ func TestSafetextYamltemplateMethod(t *testing.T) {
 }
 
 func TestSafetextYamltemplateOptOut(t *testing.T) {
-	tmpl, _ := template.New("test").Parse("{ Person-{{ (StructuralData .Name) }}: {{ .Age }} }")
+	tmpl := template.Must(template.New("test").Parse(
+		"{ Person-{{ (StructuralData .Name) }}: {{ .Age }} }",
+	))
 
 	type person struct {
 		Name string
@@ -467,7 +479,7 @@ func TestCustomTypeWithStringBaseYamltemplatePositiveStruct(t *testing.T) {
 name: {{ .Name }}
 type: {{ .PDType }}
 `
-	tmpl, _ := template.New("test").Parse(yamlTemplate)
+	tmpl := template.Must(template.New("test").Parse(yamlTemplate))
 
 	type PersistentDiskType string
 
@@ -480,5 +492,59 @@ type: {{ .PDType }}
 	err := tmpl.Execute(&buf, StorageClassSpec{Name: "ssd", PDType: "pd-ssd"})
 	if err != nil {
 		t.Errorf("tmpl.Execute() error = %v", err)
+	}
+}
+
+// Demonstration of manually applying injection detection to the result of a function call
+func readFile(path string) string {
+	// (Read potentially untrusted file)
+
+	switch path {
+	case "untrusted.txt":
+		return ", injection: true"
+	case "safe.txt":
+		return "safe"
+	default:
+		panic("Unknown file path!")
+	}
+}
+
+func TestSafetextYamltemplateManualAnnotation(t *testing.T) {
+	var funcMap = map[string]any{
+		"readFile": readFile,
+	}
+
+	tmpl := template.Must(template.New("test").Funcs(template.FuncMap(funcMap)).Parse(
+		"{ name: {{ readFile (StructuralData .path) | ApplyInjectionDetection }} }",
+	))
+
+	type testCase struct {
+		name         string
+		replacements map[string]string
+		err          bool
+	}
+
+	testCases := []testCase{
+		{
+			name:         "negative",
+			replacements: map[string]string{"path": "safe.txt"},
+			err:          false,
+		},
+		{
+			name:         "positive",
+			replacements: map[string]string{"path": "untrusted.txt"},
+			err:          true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			err := tmpl.Execute(&buf, tc.replacements)
+
+			if (err != nil) != tc.err {
+				t.Errorf("tmpl.Execute: Expected %v, got %v\n", tc.err, err)
+			}
+		})
 	}
 }
