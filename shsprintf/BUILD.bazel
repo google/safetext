@@ -1,0 +1,26 @@
+package(default_visibility = ["//visibility:public"])
+
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "shsprintf",
+    srcs = ["shsprintf.go"],
+    importpath = "github.com/google/safetext/shsprintf",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//common",
+        "@cc_mvdan_sh_v3//syntax",
+    ],
+)
+
+alias(
+    name = "go_default_library",
+    actual = ":shsprintf",
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "shsprintf_test",
+    srcs = ["shsprintf_test.go"],
+    deps = [":shsprintf"],
+)

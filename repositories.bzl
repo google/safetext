@@ -1,6 +1,12 @@
 load("@bazel_gazelle//:deps.bzl", "go_repository")
-
 def go_repositories():
+    go_repository(
+        name = "cc_mvdan_sh_v3",
+        build_file_proto_mode = "disable_global",
+        importpath = "mvdan.cc/sh/v3",
+        sum = "h1:hmP3UOw4f+EYexsJjFxvU38+kn+V/s2CclXHanIBkmQ=",
+        version = "v3.5.1",
+    )
     go_repository(
         name = "com_github_bazelbuild_bazelisk",
         build_file_proto_mode = "disable_global",

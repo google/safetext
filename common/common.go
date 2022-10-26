@@ -53,7 +53,7 @@ var stringCallback func(string) string
 var stringCallbackLock sync.Mutex
 
 func textTemplateRemediationFunc(data interface{}) interface{} {
-	return deepCopyMutateStrings(data, stringCallback)
+	return DeepCopyMutateStrings(data, stringCallback)
 }
 
 // ExecuteWithCallback performs an execution on a callback-applied template
@@ -76,7 +76,8 @@ func dereference(data interface{}) interface{} {
 	return reflect.ValueOf(data).Elem().Interface()
 }
 
-func deepCopyMutateStrings(data interface{}, mutateF func(string) string) interface{} {
+// DeepCopyMutateStrings performs a deep copy, but mutates any strings according to the mutation callback.
+func DeepCopyMutateStrings(data interface{}, mutateF func(string) string) interface{} {
 	var r interface{}
 
 	if data == nil {
@@ -89,7 +90,7 @@ func deepCopyMutateStrings(data interface{}, mutateF func(string) string) interf
 		if p.IsNil() {
 			r = data
 		} else {
-			c := deepCopyMutateStrings(dereference(data), mutateF)
+			c := DeepCopyMutateStrings(dereference(data), mutateF)
 			r = makePointer(c)
 
 			// Sometimes we accidentally introduce one too minterface{} layers of indirection (seems related to protobuf generated fields like ReleaseNamespace *ReleaseNamespace `... reflect:"unexport"`)
@@ -102,14 +103,14 @@ func deepCopyMutateStrings(data interface{}, mutateF func(string) string) interf
 	case reflect.Slice, reflect.Array:
 		rc := reflect.MakeSlice(reflect.TypeOf(data), reflect.ValueOf(data).Len(), reflect.ValueOf(data).Len())
 		for i := 0; i < reflect.ValueOf(data).Len(); i++ {
-			rc.Index(i).Set(reflect.ValueOf(deepCopyMutateStrings(reflect.ValueOf(data).Index(i).Interface(), mutateF)))
+			rc.Index(i).Set(reflect.ValueOf(DeepCopyMutateStrings(reflect.ValueOf(data).Index(i).Interface(), mutateF)))
 		}
 		r = rc.Interface()
 	case reflect.Map:
 		rc := reflect.MakeMap(reflect.TypeOf(data))
 		dataIter := reflect.ValueOf(data).MapRange()
 		for dataIter.Next() {
-			rc.SetMapIndex(dataIter.Key(), reflect.ValueOf(deepCopyMutateStrings(dataIter.Value().Interface(), mutateF)))
+			rc.SetMapIndex(dataIter.Key(), reflect.ValueOf(DeepCopyMutateStrings(dataIter.Value().Interface(), mutateF)))
 		}
 		r = rc.Interface()
 	case reflect.Struct:
@@ -124,7 +125,7 @@ func deepCopyMutateStrings(data interface{}, mutateF func(string) string) interf
 			// Don't copy unexported fields
 			if unicode.IsUpper(r) {
 				reflect.Indirect(s).Field(i).Set(
-					reflect.ValueOf(deepCopyMutateStrings(v.Field(i).Interface(), mutateF)),
+					reflect.ValueOf(DeepCopyMutateStrings(v.Field(i).Interface(), mutateF)),
 				)
 			}
 		}

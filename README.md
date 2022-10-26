@@ -3,7 +3,7 @@
 **This is not an officially supported Google product.**
 
 Safe-by-construction libraries for producing formats like YAML, to replace
-syntax-unaware libraries like `text/template` that are at risk of
+syntax-unaware libraries like `text/template` and `sprintf` that are at risk of
 injection vulnerabilities.
 
 ## Example use-case
@@ -182,3 +182,28 @@ in the input data affect the structure of the resultant YAML (just the values).
 -   Functions with side effects. The libraries work by performing multiple
     template executions, so if you register functions that have side effects,
     this could cause unexpected behaviour (EG: `id: {{ AllocateID }}`).
+
+## `shsprintf`
+
+`shsprintf` is designed to allow you to generate shell scripts with the
+guarantee that none of the input data strings will be able to inject new
+commands or flags. See the below example, which will return the error
+`shsprintf.ErrShInjection` instead of the script with an injected command:
+
+```
+message := "`whoami`"
+result, err := shsprintf.Sprintf("git commit -m %s", message)
+```
+
+`shsprintf.Sprintf` adds an error return value compared to `fmt.Sprintf`, but
+the API is otherwise the same. If `panic` is acceptable, `shsprintf.MustSprintf`
+is a drop-in-replacement.
+
+Unlike with `text/template` there are no special annotations. If you need to
+pass multiple arguments for example, this should be done by altering the format
+string:
+
+```
+files := []any{ "file1", "file2", "file3" }
+result, err := shsprintf.Sprintf("cat" + strings.Repeat(" %s", len(files)), files...)
+```
