@@ -3,11 +3,13 @@
 package shsprintf
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"reflect"
 	"regexp"
 	"strings"
+	"unicode/utf8"
 	"mvdan.cc/sh/v3/syntax"
 	
 	"github.com/google/safetext/common"
@@ -20,6 +22,33 @@ var ErrInvalidShTemplate error = errors.New("Invalid Shell Template")
 var ErrShInjection error = errors.New("Shell Injection Detected")
 
 const replaceableIndicator string = "REPLACEABLE"
+
+const (
+	specialChars = "\\'\"`${[|&;<>()*?!+@" +
+		// extraSpecialChars
+		" \t\r\n" +
+		// prefixChars
+		"~"
+)
+
+// EscapeDefaultContext escapes special characters in a context where there is no existing quoting, such as --arg=%s
+func EscapeDefaultContext(in string) string {
+	var buf bytes.Buffer
+
+	cur := in
+	for len(cur) > 0 {
+		c, l := utf8.DecodeRuneInString(cur)
+		cur = cur[l:]
+
+		if strings.ContainsRune(specialChars, c) {
+			buf.WriteByte('\\')
+		}
+
+		buf.WriteRune(c)
+	}
+
+	return buf.String()
+}
 
 func commentsArrayMatch(a, b []syntax.Comment) bool {
 	if len(b) != len(a) {
@@ -437,7 +466,8 @@ type wordComparisonContext int
 
 const (
 	matchStructure      wordComparisonContext = 0
-	forbidFlagInjection wordComparisonContext = 1
+	forbidFlagInjection wordComparisonContext = 1 << 0
+	literal             wordComparisonContext = 1 << 1
 )
 
 func wordsArrayMatch(a, b []*syntax.Word, ctx wordComparisonContext) bool {
@@ -469,7 +499,7 @@ func wordsMatch(a, b []syntax.WordPart, ctx wordComparisonContext) bool {
 }
 
 func verifyStrings(a, b string, ctx wordComparisonContext) bool {
-	aPat := "(?s)^" + strings.Replace(regexp.QuoteMeta(a), replaceableIndicator, ".*", -1) + "$"
+	aPat := "(?s)^" + strings.Replace(regexp.QuoteMeta(a), replaceableIndicator, "(.*)", -1) + "$"
 
 	matched, err := regexp.Match(aPat, []byte(b))
 	if err != nil {
@@ -480,9 +510,21 @@ func verifyStrings(a, b string, ctx wordComparisonContext) bool {
 		return false
 	}
 
-	if ctx == forbidFlagInjection {
+	if ctx&forbidFlagInjection != 0 {
 		if flagInjected(a, b) {
 			return false
+		}
+	}
+
+	if ctx&literal != 0 {
+		// Repeat matching to capture subgroups (untrusted insertions)
+		re := regexp.MustCompile(aPat)
+		insertedContent := re.FindStringSubmatch(b)[1:]
+
+		for _, g := range insertedContent {
+			if literalInjection(g) {
+				return false
+			}
 		}
 	}
 
@@ -493,17 +535,25 @@ func flagInjected(a, b string) bool {
 	return !strings.HasPrefix(a, "-") && strings.HasPrefix(b, "-")
 }
 
-// Check for introduction or removal of ? * + @ ! characters
-func literalInjection(a, b string) bool {
-	for _, specialChar := range []string{"?", "*", "+", "@", "!"} {
-		count := strings.Count(a, specialChar)
+// Check for unescaped ? * + @ ! characters
+func literalInjection(a string) bool {
+	literalSpecials := map[rune]struct{}{'?': {}, '*': {}, '+': {}, '@': {}, '!': {}}
 
-		if strings.Count(b, specialChar) != count {
-			return true
+	escaped := false
+	for _, c := range a {
+		if !escaped {
+			if c == '\\' {
+				escaped = true
+			} else if _, special := literalSpecials[c]; special {
+				return true
+			}
+		} else {
+			escaped = false
 		}
 	}
 
-	return false
+	// Unpaired trailing \ character would be incorrect escaping
+	return escaped
 }
 
 func wordPartsMatch(a, b syntax.WordPart, ctx wordComparisonContext) bool {
@@ -513,11 +563,7 @@ func wordPartsMatch(a, b syntax.WordPart, ctx wordComparisonContext) bool {
 
 	switch a := a.(type) {
 	case *syntax.Lit:
-		if !verifyStrings(a.Value, b.(*syntax.Lit).Value, ctx) {
-			return false
-		}
-
-		if literalInjection(a.Value, b.(*syntax.Lit).Value) {
+		if !verifyStrings(a.Value, b.(*syntax.Lit).Value, ctx|literal) {
 			return false
 		}
 	case *syntax.SglQuoted:

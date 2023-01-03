@@ -187,8 +187,9 @@ in the input data affect the structure of the resultant YAML (just the values).
 
 `shsprintf` is designed to allow you to generate shell scripts with the
 guarantee that none of the input data strings will be able to inject new
-commands or flags. See the below example, which will return the error
-`shsprintf.ErrShInjection` instead of the script with an injected command:
+commands or flags regardless of potentially incorrect escaping. See the below
+example, which will return the error `shsprintf.ErrShInjection` instead of the
+script with an injected command:
 
 ```
 message := "`whoami`"
@@ -196,8 +197,15 @@ result, err := shsprintf.Sprintf("git commit -m %s", message)
 ```
 
 `shsprintf.Sprintf` adds an error return value compared to `fmt.Sprintf`, but
-the API is otherwise the same. If `panic` is acceptable, `shsprintf.MustSprintf`
-is a drop-in-replacement.
+the API is otherwise the same. `shsprintf.MustSprintf` is available for cases
+where panic is acceptable.
+
+`shsprintf` comes with an escaping function that is recommended for use:
+
+```
+message := "`whoami`"
+result := shsprintf.MustSprintf("git commit -m %s", shsprintf.EscapeDefaultContext(message))
+```
 
 Unlike with `text/template` there are no special annotations. If you need to
 pass multiple arguments for example, this should be done by altering the format

@@ -391,3 +391,17 @@ EOF`, path, content)
 		t.Errorf("Unexpected Sprintf error: %v", err)
 	}
 }
+
+func TestSafetextShsprintfEscape(t *testing.T) {
+	arg := "bla"
+
+	for i := 0; i < 256; i++ {
+		arg += string(i)
+	}
+
+	_, err := shsprintf.Sprintf(`cmd --arg=%s`, shsprintf.EscapeDefaultContext(arg))
+
+	if err != nil {
+		t.Errorf("Unexpected Sprintf error: %v", err)
+	}
+}
