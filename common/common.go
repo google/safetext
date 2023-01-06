@@ -20,7 +20,7 @@
 package common
 
 import (
-	"bytes"
+	"io"
 	"reflect"
 	"sync"
 	"text/template"
@@ -41,6 +41,11 @@ func echo(in interface{}) interface{} {
 	return in
 }
 
+// EchoString is a nop string callback
+func EchoString(in string) string {
+	return in
+}
+
 // BaselineString is a string callback function that just returns a constant string,
 // used to get a baseline of how the resultant YAML is structured.
 func BaselineString(string) string {
@@ -58,7 +63,7 @@ func textTemplateRemediationFunc(data interface{}) interface{} {
 
 // ExecuteWithCallback performs an execution on a callback-applied template
 // (WalkApplyFuncToNonDeclaractiveActions) with a specified callback.
-func ExecuteWithCallback(tmpl *template.Template, cb func(string) string, result *bytes.Buffer, data interface{}) error {
+func ExecuteWithCallback(tmpl *template.Template, cb func(string) string, result io.Writer, data interface{}) error {
 	stringCallbackLock.Lock()
 	defer stringCallbackLock.Unlock()
 	stringCallback = cb

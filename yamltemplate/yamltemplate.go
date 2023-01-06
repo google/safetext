@@ -218,7 +218,7 @@ func mutateString(s string) string {
 // value that the reflect.Value holds, as in fmt.Print.
 func (t *Template) Execute(wr io.Writer, data interface{}) (err error) {
 	if data == nil {
-		return t.unsafeTemplate.Execute(wr, data)
+		return common.ExecuteWithCallback(t.unsafeTemplate, common.EchoString, wr, data)
 	}
 
 	// An attacker may be able to cause type confusion or nil dereference panic during allKeysMatch
@@ -231,7 +231,7 @@ func (t *Template) Execute(wr io.Writer, data interface{}) (err error) {
 	// Calculate requested result first
 	var requestedResult bytes.Buffer
 
-	if err := t.unsafeTemplate.Execute(&requestedResult, data); err != nil {
+	if err := common.ExecuteWithCallback(t.unsafeTemplate, common.EchoString, &requestedResult, data); err != nil {
 		return err
 	}
 
