@@ -142,11 +142,60 @@ in the input data affect the structure of the resultant YAML (just the values).
     config: {{ (StructuralData .Config) }}
     ```
 
--   Another case of needing the `StructuralData` annotation would be if you have
-    a key name that depends on an input string:
+-   Another case of needing the `StructuralData` annotation would be where you
+    need to include a complete map into the yaml structure. Using
+    `StructuralData` alone may let injections pass through via the key so we
+    need an extra layer of validation here:
+
+    ~~~
+    labels:
+    {{- range $key, $value := .Labels }}
+        {{ (StructuralData $key | MapKey) }}: {{ $value }}
+    {{- end }}
+     ```
+
+    The corresponding golang side could look like this:
+
+    ~~~
+
+    func mapKeyFunc(data any) (string, error) { if v, ok := data.(string); ok {
+    matched, err := regexp.MatchString(`^[a-zA-Z0-9/\-.]+$`, v) if err != nil {
+    return "", err } if !matched { return "", fmt.Errorf("invalid characters in
+    the key: %v", v) } return v, nil }
 
     ```
-    {{ (StructuralData .Name) }}-age: {{ .Age }}
+    return "", errors.New("invalid input")
+    ```
+
+    } ...
+
+    tmp:= template.New("something") tmp.Funcs(map[string]any{"MapKey":
+    mapKeyFunc}) tmpl := template.Must(tmp.Parse(yamlTemplate)) ```
+
+-   You can combine `yamltemplate` with `shprintf`. Consider the following
+    cloud-init yaml template:
+
+    ```
+    ---
+    write_files:
+    - path: /etc/nginx/refresh.sh
+      owner: root:root
+      permissions: 0755  # Don't forget the 0 (you are probably using octal...)
+      content: |
+        #!/bin/bash
+        set -euo pipefail
+
+        {{ shprintf `curl %s > /tmp/something` .userInput }}
+    ```
+
+    Evaluating this template with safetext/yamltemplate, both shell command and
+    YAML injections will be prevented.
+
+    To do this, you need to setup the golang side like this:
+
+    ```
+    tmp:= addons.WithShsprintf(template.New("something"))
+    tmpl := template.Must(tmp.Parse(yamlTemplate))
     ```
 
 #### Unsupported use cases for `yamltemplate`
@@ -166,6 +215,49 @@ in the input data affect the structure of the resultant YAML (just the values).
     ```
     - project:
       members: member-b
+    ```
+
+### `shtemplate`
+
+`shtemplate` is designed to allow you to generate shell scripts with the
+guarantee that none of the input data strings will be able to inject new
+commands or flags, without explicit annotation.
+
+-   For example, a template script designed to just print one string will fail
+    to render if that string injects a new command `` `./evil` ``:
+
+    ```
+    echo "{{ .addressee }}"
+    ```
+
+-   To explicitly allow an input string to contain new commands not from the
+    template string, the `StructuralData` annotation can be used:
+
+    ```
+    {{ (StructuralData .commands) }}
+    ```
+
+-   Flags (arguments starting with `-`) are also forbidden by-default. For
+    example, the below template will fail to render if `Filename` is
+    `--interactive`:
+
+    ```
+    git add {{ .Filename }}
+    ```
+
+-   To explicitly allow an input string passed as a command argument to be a
+    flag, the `AllowFlags` annotation can be used:
+
+    ```
+    git add {{ (AllowFlags .FilenameOrGitAddFlag) }}
+    ```
+
+-   Multiple arguments from a single input string is also forbidden by-default.
+    This construct should instead be implemented using an array and `range`
+    expression:
+
+    ```
+    ls {{ range .Paths }}{{.}} {{end}}
     ```
 
 ### Unsupported use-cases for `text/template` replacements

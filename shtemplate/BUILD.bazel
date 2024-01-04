@@ -1,26 +1,29 @@
+licenses(["notice"])  # Apache 2.0
+
 package(default_visibility = ["//visibility:public"])
 
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
-    name = "shsprintf",
-    srcs = ["shsprintf.go"],
-    importpath = "github.com/google/safetext/shsprintf",
+    name = "shtemplate",
+    srcs = ["shtemplate.go"],
+    importpath = "github.com/google/safetext/shtemplate",
     visibility = ["//visibility:public"],
     deps = [
         "//common",
+        "@com_github_pborman_uuid//:uuid",
         "@cc_mvdan_sh_v3//syntax",
     ],
 )
 
 alias(
     name = "go_default_library",
-    actual = ":shsprintf",
+    actual = ":shtemplate",
     visibility = ["//visibility:public"],
 )
 
 go_test(
-    name = "shsprintf_test",
-    srcs = ["shsprintf_test.go"],
-    deps = [":shsprintf"],
+    name = "shtemplate_test",
+    srcs = ["shtemplate_test.go"],
+    deps = [":shtemplate"],
 )

@@ -1,51 +1,54 @@
-/*
- *
- * Copyright 2022 Google LLC
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     https://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
- */
+// Copyright 2023 Google LLC.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package yamltemplate_test
 
 import (
-	// Replace text/template in your code with safetext/yamltemplate for automatic YAML injection detection
-
-	//"text/template"
-	template "github.com/google/safetext/yamltemplate"
-
-	"os"
 	"bytes"
+	"embed"
 	"fmt"
 	"strconv"
+	"strings"
 	"testing"
+
+	template "github.com/google/safetext/yamltemplate"
 )
+
+//go:embed list.yaml.tmpl
+var eListYamlTmpl embed.FS
+
+//go:embed nested-template.yaml.tmpl
+var nestedTemplateYamlTmpl embed.FS
+
+//go:embed nested-template-inner.yaml.tmpl
+var nestedTemplateInnerYamlTmpl embed.FS
 
 func TestSafetextYamltemplate(t *testing.T) {
 	type testCase struct {
 		tmplText     string
-		replacements map[interface{}]interface{}
-		err          error
+		replacements map[any]any
+		err          bool
 	}
 
 	testCases := []testCase{
 		// Negative cases
 		{
 			tmplText: "{ hello: \"{{ .addressee | js }}\" }",
-			replacements: map[interface{}]interface{}{
+			replacements: map[any]any{
 				"addressee": "world\", inject: \"oops",
 			},
-			err: nil,
+			err: false,
 		},
 
 		{
@@ -58,7 +61,7 @@ func TestSafetextYamltemplate(t *testing.T) {
 - hello: {{ .addressee }},
 `,
 			replacements: nil,
-			err:          nil,
+			err:          false,
 		},
 
 		{
@@ -67,11 +70,11 @@ data:
   HTTPS_PROXY: {{.p1}}
   NO_PROXY: {{.p2}}
 `,
-			replacements: map[interface{}]interface{}{
+			replacements: map[any]any{
 				"p1": "1",
 				"p2": "localhost, 127.0.0.1",
 			},
-			err: nil,
+			err: false,
 		},
 
 		{
@@ -80,36 +83,36 @@ data:
   HTTPS_PROXY: {{.p1}}
   NO_PROXY: {{.p2}}
 `,
-			replacements: map[interface{}]interface{}{
+			replacements: map[any]any{
 				"p1": "",
 				"p2": "localhost, 127.0.0.1",
 			},
-			err: nil,
+			err: false,
 		},
 
 		{
 			tmplText: "{ {{ if not .hide }}hello: {{ .addressee }}{{end}} }",
-			replacements: map[interface{}]interface{}{
+			replacements: map[any]any{
 				"addressee": "world",
 				"hide":      false,
 			},
-			err: nil,
+			err: false,
 		},
 
 		{
 			tmplText: "{ {{ if eq .addressee \"world\" }}hello: {{ .addressee }}{{end}} }",
-			replacements: map[interface{}]interface{}{
+			replacements: map[any]any{
 				"addressee": "world",
 			},
-			err: nil,
+			err: false,
 		},
 
 		{
 			tmplText: `{ list: "{{ range .entries }}{{.}}{{ end }}" }`,
-			replacements: map[interface{}]interface{}{
+			replacements: map[any]any{
 				"entries": []string{"(special characters to not trigger fast path {})", "two", "three"},
 			},
-			err: nil,
+			err: false,
 		},
 
 		{
@@ -121,19 +124,19 @@ list:
 {{end}}
 {{end}}
 `,
-			replacements: map[interface{}]interface{}{
+			replacements: map[any]any{
 				"some_field": "x",
 				"slow":       "{}",
 			},
-			err: nil,
+			err: false,
 		},
 
 		{
 			tmplText: "{ test: bla }",
-			replacements: map[interface{}]interface{}{
+			replacements: map[any]any{
 				0: "(special characters to not trigger fast path {})",
 			},
-			err: nil,
+			err: false,
 		},
 
 		// Verify that unused replacements in nested yaml don't cause templates to fail
@@ -143,11 +146,11 @@ list:
   next:
   - first: test
 `,
-			replacements: map[interface{}]interface{}{
+			replacements: map[any]any{
 				"addressee": "world",
 				"unused":    "some-thing",
 			},
-			err: nil,
+			err: false,
 		},
 
 		// Verify that valid strings with non-standard characters work in nested yaml
@@ -157,100 +160,100 @@ list:
   next:
   - first: test
 `,
-			replacements: map[interface{}]interface{}{
+			replacements: map[any]any{
 				"addressee": "whole-world",
 			},
-			err: nil,
+			err: false,
 		},
 
 		// Verify that internal YAML parser rejects duplicate keys
 		{
 			tmplText: "{ hello: {{ .addressee }}, hello: multiple }",
-			replacements: map[interface{}]interface{}{
-				"addressee": "world (special characters to not trigger fast path {})",
+			replacements: map[any]any{
+				"addressee": "world",
 			},
-			err: template.ErrInvalidYAMLTemplate,
+			err: true,
 		},
 
 		// Verify that internal YAML parsers rejects map keys
 		{
 			tmplText: "{ {}: {{ .addressee }} }",
-			replacements: map[interface{}]interface{}{
-				"addressee": "world (special characters to not trigger fast path {})",
+			replacements: map[any]any{
+				"addressee": "world",
 			},
-			err: template.ErrInvalidYAMLTemplate,
+			err: true,
 		},
 
 		// Verify that internal YAML parsers rejects slice keys
 		{
 			tmplText: "{ [1, 2, 3]: {{ .addressee }} }",
-			replacements: map[interface{}]interface{}{
-				"addressee": "world (special characters to not trigger fast path {})",
+			replacements: map[any]any{
+				"addressee": "world",
 			},
-			err: template.ErrInvalidYAMLTemplate,
+			err: true,
 		},
 
 		// Verify that YAML parses still accepts "non-strict" YAML (whilst rejecting duplicate keys)
 		{
 			tmplText: "a: {{ .addressee }}",
-			replacements: map[interface{}]interface{}{
-				"addressee": "world (special characters to not trigger fast path {})",
+			replacements: map[any]any{
+				"addressee": "world",
 			},
-			err: nil,
+			err: false,
 		},
 
 		// nil type
 		{
 			tmplText: `{ a: {{.a}}, b: '{{.b}}' }`,
-			replacements: map[interface{}]interface{}{
+			replacements: map[any]any{
 				"a": nil,
 				"b": "{}",
 			},
-			err: nil,
+			err: false,
 		},
 
 		// Positive cases
 		{
 			tmplText: "{ hello: \"{{ .addressee }}\" }",
-			replacements: map[interface{}]interface{}{
+			replacements: map[any]any{
 				"addressee": "world\", hello: \"oops_p",
 			},
-			err: template.ErrYAMLInjection,
+			err: true,
 		},
 
 		{
 			tmplText: "{ hello: \"{{ .addressee }}\", parent: [ 1, {{ .s }}, 3 ] }",
-			replacements: map[interface{}]interface{}{
+			replacements: map[any]any{
 				"addressee": "world",
 				"s":         "2, 4",
 			},
-			err: template.ErrYAMLInjection,
+			err: true,
 		},
 
 		{
 			tmplText: "{ hello: \"{{ .addressee }}\", parent: [ 1, { a: {{ .s }} }, 3 ] }",
-			replacements: map[interface{}]interface{}{
+			replacements: map[any]any{
 				"addressee": "world",
 				"s":         "2 , b : b",
 			},
-			err: template.ErrYAMLInjection,
+			err: true,
 		},
 
 		{
 			tmplText: "{ hello: {{ .addressee }} }",
-			replacements: map[interface{}]interface{}{
+			replacements: map[any]any{
 				"addressee": "{}",
 			},
-			err: template.ErrYAMLInjection,
+			err: true,
 		},
 
 		{
 			tmplText: "{ {{ if eq .caddressee \"world\" }}hello: {{ .addressee }}{{end}} }",
-			replacements: map[interface{}]interface{}{
+			replacements: map[any]any{
 				"caddressee": "world",
 				"addressee":  "world, inject: true",
 			},
-			err: template.ErrYAMLInjection,
+			err: true,
 		},
 
 		{
@@ -262,42 +265,40 @@ list:
 - stream: two
 - hello: {{ .addressee }}
 `,
-			replacements: map[interface{}]interface{}{"addressee": "world\n- inject"},
-			err:          template.ErrYAMLInjection,
+			replacements: map[any]any{"addressee": "world\n- inject"},
+			err:          true,
 		},
 
 		// Accessing anchors should count as injected YAML syntax
 		{
 			tmplText: `{ secret: &secret_label 'test', disclosed: {{ .controlled }}  }`,
-			replacements: map[interface{}]interface{}{
+			replacements: map[any]any{
 				"controlled": "*secret_label",
 			},
-			err: template.ErrYAMLInjection,
+			err: true,
 		},
 	}
 
 	for _, tc := range testCases {
-		tmpl := template.Must(template.New("test").Parse(tc.tmplText))
-		var buf bytes.Buffer
-		err := tmpl.Execute(&buf, tc.replacements)
+		t.Run(tc.tmplText, func(t *testing.T) {
+			tmpl := template.Must(template.New("test").Parse(tc.tmplText))
+			var buf bytes.Buffer
+			err := tmpl.Execute(&buf, tc.replacements)
 
-		if err != tc.err {
-			t.Errorf("Expected %v, got %v\n", tc.err, err)
-
-			if err == nil {
-				t.Logf("template execution result was %s\n", buf.String())
+			if (err != nil) != tc.err {
+				t.Errorf("tmpl.Execute: Expected %v, got %v\n", tc.err, err)
 			}
-		}
+		})
 	}
 }
 
 // Check func maps still work
-func sanitize(input interface{}) string {
+func sanitize(input any) string {
 	return fmt.Sprintf("%q", input)
 }
 
 func TestSafetextYamltemplateNegativeFuncMap(t *testing.T) {
-	var funcMap = map[string]interface{}{
+	var funcMap = map[string]any{
 		"sanitize": sanitize,
 	}
 
@@ -305,7 +306,7 @@ func TestSafetextYamltemplateNegativeFuncMap(t *testing.T) {
 		"{ a: {{ .a | sanitize }}, b: {{ .b | sanitize }} }",
 	))
 
-	replacements := map[string]interface{}{
+	replacements := map[string]any{
 		"a": "world\", inject: \"oops",
 		"b": "world, inject: oops",
 	}
@@ -359,7 +360,7 @@ func TestSafetextYamltemplateNegativeRootList(t *testing.T) {
 - one: b
 `))
 
-	replacements := map[string]interface{}{
+	replacements := map[string]any{
 		"some_field":    "x",
 		"use_slow_path": "{}",
 	}
@@ -394,33 +395,18 @@ func TestSafetextYamltemplatePositiveIndirection(t *testing.T) {
 
 // Check parsing files works
 func TestSafetextYamltemplateFiles(t *testing.T) {
-	tmplText := `list:
-{{with .some_field}}
-{{if eq . "x"}}
-- {{.}}
-{{end}}
-{{end}}
-`
-	f, err := os.CreateTemp("", "list.yaml.tmpl")
+	tmpl, err := template.ParseFS(eListYamlTmpl, "list.yaml.tmpl")
 	if err != nil {
-		t.Errorf("os.CreateTemp() error = %v", err)
-	}
-	defer os.Remove(f.Name())
-
-	if _, err = f.WriteString(tmplText); err != nil {
-		 t.Errorf("f.WriteString() error = %v", err)
+		t.Fatalf("template.ParseFS() failed: %v", err)
 	}
 
-	tmpl := template.Must(template.ParseFiles(f.Name()))
-
-	replacements := map[string]interface{}{
+	replacements := map[string]any{
 		"some_field":    "x",
 		"use_slow_path": "{}",
 	}
 
 	var buf bytes.Buffer
-	err = tmpl.Execute(&buf, replacements)
-	if err != nil {
+	if err := tmpl.Execute(&buf, replacements); err != nil {
 		t.Errorf("tmpl.Execute() error = %v", err)
 	}
 }
@@ -432,11 +418,9 @@ type A struct {
 func (A) GetName(n int) string { return "n is " + strconv.Itoa(n) }
 
 func TestSafetextYamltemplateMethod(t *testing.T) {
-	tmpl := template.Must(template.New("test").Parse(
-		`- {{ (.a.GetName 0x41) | js }}`,
-	))
+	tmpl := template.Must(template.New("test").Parse(`- {{ (.a.GetName 0x41) | js }}`))
 
-	replacements := map[string]interface{}{
+	replacements := map[string]any{
 		"a":             A{},
 		"use_slow_path": "{}",
 	}
@@ -453,9 +437,7 @@ func TestSafetextYamltemplateMethod(t *testing.T) {
 }
 
 func TestSafetextYamltemplateOptOut(t *testing.T) {
-	tmpl := template.Must(template.New("test").Parse(
-		"{ Person-{{ (StructuralData .Name) }}: {{ .Age }} }",
-	))
+	tmpl := template.Must(template.New("test").Parse("{ Person-{{ (StructuralData .Name) }}: {{ .Age }} }"))
 
 	type person struct {
 		Name string
@@ -546,5 +528,75 @@ func TestSafetextYamltemplateManualAnnotation(t *testing.T) {
 				t.Errorf("tmpl.Execute: Expected %v, got %v\n", tc.err, err)
 			}
 		})
+	}
+}
+
+func indent(str string, level int) string {
+	pad := "\n" + strings.Repeat(" ", level)
+	return strings.Replace(str, "\n", pad, -1)
+}
+
+var innerData string
+
+func executeTemplate(tmpl *template.Template, tmplData any, indentLevel int) (string, error) {
+	sb := new(strings.Builder)
+	if err := tmpl.Execute(sb, map[string]any{
+		"Data":  tmplData,
+		"Inner": innerData,
+	}); err != nil {
+		return "", fmt.Errorf("failed to execute %s template: %v", tmpl.Name(), err)
+	}
+	return indent(sb.String(), indentLevel), nil
+}
+
+type DaemonSetConfiguration struct {
+	// Name is the name of the DaemonSet
+	Name string
+}
+
+func (d *DaemonSetConfiguration) GenerateLabels(indent int) (string, error) {
+	labelsTmpl, err := template.ParseFS(nestedTemplateInnerYamlTmpl, "nested-template-inner.yaml.tmpl")
+	if err != nil {
+		return "", fmt.Errorf("template.ParseFS() failed: %v", err)
+	}
+	labelsMap := map[string]string{
+		"one":   "foo",
+		"two":   "bar",
+		"three": "baz",
+		"four":  "qux",
+	}
+
+	labels, err := executeTemplate(labelsTmpl, labelsMap, indent)
+	if err != nil {
+		return "", fmt.Errorf("failed to generate Labels clause: %v", err)
+	}
+	return labels, nil
+}
+
+func TestSafetextYamltemplateNegativeNestedTemplate(t *testing.T) {
+	innerData = "Negative"
+	d := DaemonSetConfiguration{Name: "NestedTest"}
+	nestedTmpl, err := template.ParseFS(nestedTemplateYamlTmpl, "nested-template.yaml.tmpl")
+	if err != nil {
+		t.Fatalf("template.ParseFS() failed: %v", err)
+	}
+	var buf bytes.Buffer
+	err = nestedTmpl.Execute(&buf, &d)
+	if err != nil {
+		t.Errorf("tmpl.Execute() error = %v", err)
+	}
+}
+
+func TestSafetextYamltemplatePositiveNestedTemplate(t *testing.T) {
+	innerData = "Injection, value: 42"
+	d := DaemonSetConfiguration{Name: "NestedTest"}
+	nestedTmpl, err := template.ParseFS(nestedTemplateYamlTmpl, "nested-template.yaml.tmpl")
+	if err != nil {
+		t.Fatalf("template.ParseFS() failed: %v", err)
+	}
+	var buf bytes.Buffer
+	err = nestedTmpl.Execute(&buf, &d)
+	if err == nil {
+		t.Errorf("tmpl.Execute() error = %v", err)
 	}
 }
