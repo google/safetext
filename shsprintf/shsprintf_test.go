@@ -40,6 +40,24 @@ func TestSafetextShsprintf(t *testing.T) {
 		},
 
 		{
+			format: "echo %s",
+			replacements: []any{
+				// '+' is allowed
+				"Just+A+Random+String",
+			},
+			err: nil,
+		},
+
+		{
+			format: "echo %s",
+			replacements: []any{
+				// '@' is allowed
+				"like@an.email",
+			},
+			err: nil,
+		},
+
+		{
 			format: `echo "%s"`,
 			replacements: []any{
 				"hello hello",
@@ -165,6 +183,34 @@ fi`,
 			format: "echo %s",
 			replacements: []any{
 				"`./command`",
+			},
+			err: shsprintf.ErrShInjection,
+		},
+
+		// Special characters
+		{
+			format: "echo %s",
+			replacements: []any{
+				// globbing chars ('?') are not allowed
+				"Just?ARandomString",
+			},
+			err: shsprintf.ErrShInjection,
+		},
+
+		{
+			format: "echo %s",
+			replacements: []any{
+				// globbing chars ('*') are not allowed
+				"Just*ARandomString",
+			},
+			err: shsprintf.ErrShInjection,
+		},
+
+		{
+			format: "echo %s",
+			replacements: []any{
+				// ! is command history
+				"Just!ARandomString",
 			},
 			err: shsprintf.ErrShInjection,
 		},

@@ -549,9 +549,9 @@ func flagInjected(a, b string) bool {
 	return !strings.HasPrefix(a, "-") && strings.HasPrefix(b, "-")
 }
 
-// Check for unescaped ? * + @ ! characters
+// Check for unescaped ? * ! characters
 func literalInjection(a string) bool {
-	literalSpecials := map[rune]struct{}{'?': {}, '*': {}, '+': {}, '@': {}, '!': {}}
+	literalSpecials := map[rune]struct{}{'?': {}, '*': {}, '!': {}}
 
 	escaped := false
 	for _, c := range a {
