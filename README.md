@@ -147,30 +147,36 @@ in the input data affect the structure of the resultant YAML (just the values).
     `StructuralData` alone may let injections pass through via the key so we
     need an extra layer of validation here:
 
-    ~~~
+    ```
     labels:
     {{- range $key, $value := .Labels }}
         {{ (StructuralData $key | MapKey) }}: {{ $value }}
     {{- end }}
-     ```
+    ```
 
     The corresponding golang side could look like this:
 
-    ~~~
+    ```go
+    func mapKeyFunc(data any) (string, error) {
+        if v, ok := data.(string); ok {
+            matched, err := regexp.MatchString(`^[a-zA-Z0-9/\-.]+$`, v)
+            if err != nil {
+                return "", err
+            }
+            if !matched {
+                return "", fmt.Errorf("invalid characters in the key: %v", v)
+            }
+            return v, nil
+        }
 
-    func mapKeyFunc(data any) (string, error) { if v, ok := data.(string); ok {
-    matched, err := regexp.MatchString(`^[a-zA-Z0-9/\-.]+$`, v) if err != nil {
-    return "", err } if !matched { return "", fmt.Errorf("invalid characters in
-    the key: %v", v) } return v, nil }
-
-    ```
-    return "", errors.New("invalid input")
-    ```
+        return "", errors.New("invalid input")
 
     } ...
 
-    tmp:= template.New("something") tmp.Funcs(map[string]any{"MapKey":
-    mapKeyFunc}) tmpl := template.Must(tmp.Parse(yamlTemplate)) ```
+    tmp:= template.New("something")
+    tmp.Funcs(map[string]any{"MapKey":mapKeyFunc})
+    tmpl := template.Must(tmp.Parse(yamlTemplate))
+    ```
 
 -   You can combine `yamltemplate` with `shprintf`. Consider the following
     cloud-init yaml template:
