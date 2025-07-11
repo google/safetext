@@ -31,10 +31,9 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/google/safetext/common"
 	"github.com/pborman/uuid"
 	"gopkg.in/yaml.v3"
-
-	"github.com/google/safetext/common"
 )
 
 // ErrInvalidYAMLTemplate indicates the requested template is not valid YAML.

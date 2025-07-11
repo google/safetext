@@ -31,7 +31,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/google/safetext/common"
-
 	"mvdan.cc/sh/v3/syntax"
 	"github.com/pborman/uuid"
 )

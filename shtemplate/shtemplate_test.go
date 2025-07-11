@@ -15,10 +15,10 @@
 package shtemplate_test
 
 import (
-	template "github.com/google/safetext/shtemplate"
-
 	"bytes"
 	"testing"
+
+	template "github.com/google/safetext/shtemplate"
 )
 
 func TestSafetextShtemplate(t *testing.T) {
