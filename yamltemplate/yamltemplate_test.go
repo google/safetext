@@ -533,7 +533,7 @@ func TestSafetextYamltemplateManualAnnotation(t *testing.T) {
 
 func indent(str string, level int) string {
 	pad := "\n" + strings.Repeat(" ", level)
-	return strings.Replace(str, "\n", pad, -1)
+	return strings.ReplaceAll(str, "\n", pad)
 }
 
 var innerData string

@@ -513,7 +513,7 @@ func wordsMatch(a, b []syntax.WordPart, ctx wordComparisonContext) bool {
 }
 
 func verifyStrings(a, b string, ctx wordComparisonContext) bool {
-	aPat := "(?s)^" + strings.Replace(regexp.QuoteMeta(a), replaceableIndicator, "(.*)", -1) + "$"
+	aPat := "(?s)^" + strings.ReplaceAll(regexp.QuoteMeta(a), replaceableIndicator, "(.*)") + "$"
 
 	matched, err := regexp.Match(aPat, []byte(b))
 	if err != nil {
