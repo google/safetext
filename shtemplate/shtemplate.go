@@ -510,11 +510,12 @@ func wordsMatch(a, b, c []syntax.WordPart, ctx wordComparisonContext) bool {
 }
 
 func verifyStrings(a, b, c string, ctx wordComparisonContext) bool {
-	if ctx == matchExactly {
+	switch ctx {
+	case matchExactly:
 		if b != a || c != a {
 			return false
 		}
-	} else if ctx == forbidFlagInjection {
+	case forbidFlagInjection:
 		if flagInjected(a, b, c) {
 			return false
 		}
