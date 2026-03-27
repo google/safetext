@@ -15,7 +15,10 @@
 package lockedcallbacks
 
 import (
+	"io"
 	"testing"
+	"time"
+	"text/template"
 )
 
 func TestLockedCallbacksBuildFunc(t *testing.T) {
