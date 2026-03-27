@@ -29,5 +29,55 @@ func TestLockedCallbacksBuildFunc(t *testing.T) {
 	}
 }
 
+// Regression test for deadlock in SetAndExecuteWithCallback
+func TestSetAndExecuteWithCallback_NoDeadlockOnError(t *testing.T) {
+    statesmap := New()
+    tmpl := template.New("test").Option("missingkey=error")
+    tmpl, err := tmpl.Parse("foo: {{.NoSuchField}}")
+    if err != nil {
+        t.Fatalf("Parse failed: %v", err)
+    }
+
+    done := make(chan error, 1)
+    go func() {
+        err := statesmap.SetAndExecuteWithCallback(tmpl, "uuid1", func(s string) string { return s }, io.Discard, map[string]string{"foo": "bar"})
+        done <- err
+    }()
+
+    select {
+    case err := <-done:
+        if err == nil {
+            t.Errorf("Expected error due to missing key, got nil")
+        }
+    case <-time.After(3 * time.Second):
+        t.Fatal("Deadlock detected: execution did not return")
+    }
+}
+
+// Regression test for deadlock in SetAndExecuteWithShCallback
+func TestSetAndExecuteWithShCallback_NoDeadlockOnError(t *testing.T) {
+    statesmap := New()
+    tmpl := template.New("test").Option("missingkey=error")
+    tmpl, err := tmpl.Parse("foo: {{.NoSuchField}}")
+    if err != nil {
+        t.Fatalf("Parse failed: %v", err)
+    }
+
+    done := make(chan error, 1)
+    go func() {
+        err := statesmap.SetAndExecuteWithShCallback(tmpl, "uuid2", func(s string) string { return s }, func(s string) string { return s }, io.Discard, map[string]string{"foo": "bar"})
+        done <- err
+    }()
+
+    select {
+    case err := <-done:
+        if err == nil {
+            t.Errorf("Expected error due to missing key, got nil")
+        }
+    case <-time.After(3 * time.Second):
+        t.Fatal("Deadlock detected: execution did not return")
+    }
+}
+
 // TODO(b/297302763)
 // Add more tests to validate locking mechanism w/o needing global presubmit TAP to run.
