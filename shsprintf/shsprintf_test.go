@@ -345,6 +345,28 @@ fi`,
 			},
 			err: shsprintf.ErrShInjection,
 		},
+
+		{
+			format: "ls %s",
+			replacements: []any{
+				"[a-z]",
+			},
+			err: shsprintf.ErrShInjection,
+		},
+		{
+			format: "ls %s",
+			replacements: []any{
+				"~",
+			},
+			err: shsprintf.ErrShInjection,
+		},
+		{
+			format: "ls %s",
+			replacements: []any{
+				"{foo,bar}",
+			},
+			err: shsprintf.ErrShInjection,
+		},
 	}
 
 	for _, tc := range testCases {
@@ -352,7 +374,6 @@ fi`,
 			result, err := shsprintf.Sprintf(tc.format, tc.replacements...)
 			if err != tc.err {
 				t.Errorf("Got %v, expected %v", err, tc.err)
-
 				if err == nil {
 					t.Logf("template execution result was %s", result)
 				}

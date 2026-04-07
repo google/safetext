@@ -528,9 +528,9 @@ func flagInjected(a, b, c string) bool {
 	return !strings.HasPrefix(a, "-") && (strings.HasPrefix(b, "-") || strings.HasPrefix(c, "-"))
 }
 
-// Check for introduction or removal of ? * + @ ! characters
+// Check for introduction or removal of ? * + @ ! [ ] ~ { } , characters
 func literalInjection(a, b, c string) bool {
-	for _, specialChar := range []string{"?", "*", "+", "@", "!"} {
+	for _, specialChar := range []string{"?", "*", "+", "@", "!", "[", "]", "~", "{", "}", ","} {
 		count := strings.Count(a, specialChar)
 
 		if strings.Count(b, specialChar) != count || strings.Count(c, specialChar) != count {
