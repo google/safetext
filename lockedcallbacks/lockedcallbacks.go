@@ -1,4 +1,4 @@
-// Copyright 2024 Google LLC.
+// Copyright 2026 Google LLC.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -120,17 +120,9 @@ func (m *StatesMap) BuildAllowFlagsCallbackFunc(safeTmplUUID string, wrapperFunc
 // a callback to set the proper callback and execute the template.
 func (m *StatesMap) SetAndExecuteWithCallback(tmpl *template.Template, safeTmplUUID string, cb func(string) string, result io.Writer, data any) (err error) {
 	tmplState := m.lock(safeTmplUUID)
-	defer func() {
-
-		uerr := tmplState.unlock()
-
-		if err == nil {
-
-			err = uerr
-
-		}
-	}()
+	defer tmplState.unlock()
 	tmplState.Callback = cb
+
 	return tmpl.Execute(result, data)
 }
 
@@ -138,17 +130,9 @@ func (m *StatesMap) SetAndExecuteWithCallback(tmpl *template.Template, safeTmplU
 // and both callbacks to set the proper callback and execute the template.
 func (m *StatesMap) SetAndExecuteWithShCallback(tmpl *template.Template, safeTmplUUID string, cb func(string) string, allowFlagsCb func(string) string, result io.Writer, data any) (err error) {
 	tmplState := m.lock(safeTmplUUID)
-	defer func() {
-
-		uerr := tmplState.unlock()
-
-		if err == nil {
-
-			err = uerr
-
-		}
-	}()
+	defer tmplState.unlock()
 	tmplState.Callback = cb
 	tmplState.AllowFlagsCallback = allowFlagsCb
+
 	return tmpl.Execute(result, data)
 }
