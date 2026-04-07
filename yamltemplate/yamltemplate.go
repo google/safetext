@@ -1,4 +1,4 @@
-// Copyright 2024 Google LLC.
+// Copyright 2026 Google LLC.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -31,10 +31,9 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/google/safetext/common"
 	"github.com/pborman/uuid"
 	"gopkg.in/yaml.v3"
-
-	"github.com/google/safetext/common"
 )
 
 // ErrInvalidYAMLTemplate indicates the requested template is not valid YAML.

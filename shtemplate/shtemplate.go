@@ -1,4 +1,4 @@
-// Copyright 2024 Google LLC.
+// Copyright 2026 Google LLC.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -31,7 +31,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/google/safetext/common"
-
 	"mvdan.cc/sh/v3/syntax"
 	"github.com/pborman/uuid"
 )
@@ -511,11 +510,12 @@ func wordsMatch(a, b, c []syntax.WordPart, ctx wordComparisonContext) bool {
 }
 
 func verifyStrings(a, b, c string, ctx wordComparisonContext) bool {
-	if ctx == matchExactly {
+	switch ctx {
+	case matchExactly:
 		if b != a || c != a {
 			return false
 		}
-	} else if ctx == forbidFlagInjection {
+	case forbidFlagInjection:
 		if flagInjected(a, b, c) {
 			return false
 		}

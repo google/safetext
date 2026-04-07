@@ -1,4 +1,4 @@
-// Copyright 2024 Google LLC.
+// Copyright 2026 Google LLC.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -513,7 +513,7 @@ func wordsMatch(a, b []syntax.WordPart, ctx wordComparisonContext) bool {
 }
 
 func verifyStrings(a, b string, ctx wordComparisonContext) bool {
-	aPat := "(?s)^" + strings.Replace(regexp.QuoteMeta(a), replaceableIndicator, "(.*)", -1) + "$"
+	aPat := "(?s)^" + strings.ReplaceAll(regexp.QuoteMeta(a), replaceableIndicator, "(.*)") + "$"
 
 	matched, err := regexp.Match(aPat, []byte(b))
 	if err != nil {

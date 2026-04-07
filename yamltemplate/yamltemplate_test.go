@@ -1,4 +1,4 @@
-// Copyright 2024 Google LLC.
+// Copyright 2026 Google LLC.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,6 +21,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	template "github.com/google/safetext/yamltemplate"
 )
@@ -533,7 +534,7 @@ func TestSafetextYamltemplateManualAnnotation(t *testing.T) {
 
 func indent(str string, level int) string {
 	pad := "\n" + strings.Repeat(" ", level)
-	return strings.Replace(str, "\n", pad, -1)
+	return strings.ReplaceAll(str, "\n", pad)
 }
 
 var innerData string
@@ -598,5 +599,39 @@ func TestSafetextYamltemplatePositiveNestedTemplate(t *testing.T) {
 	err = nestedTmpl.Execute(&buf, &d)
 	if err == nil {
 		t.Errorf("tmpl.Execute() error = %v", err)
+	}
+}
+
+func TestReproDeadlock(t *testing.T) {
+	tmplText := "{{.NonExistentField}}"
+	tmpl := template.New("test").Option("missingkey=error")
+	_, err := tmpl.Parse(tmplText)
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+
+	var buf bytes.Buffer
+	t.Log("First execution (should fail)...")
+	err = tmpl.Execute(&buf, map[string]any{})
+	if err == nil {
+		t.Error("First execution unexpectedly succeeded")
+		return
+	}
+	t.Logf("First execution failed as expected: %v", err)
+
+	t.Log("Second execution (should not deadlock)...")
+	// Use a channel to timeout if it deadlocks
+	done := make(chan bool)
+	go func() {
+		err = tmpl.Execute(&buf, map[string]any{})
+		done <- true
+	}()
+
+	select {
+	case <-done:
+		t.Log("Second execution finished (did not deadlock)")
+	case <-time.After(5 * time.Second):
+		t.Error("Deadlock detected: Second execution timed out")
+		return
 	}
 }
