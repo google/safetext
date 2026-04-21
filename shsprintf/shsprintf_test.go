@@ -453,13 +453,14 @@ EOF`, path, content)
 }
 
 func TestSafetextShsprintfEscape(t *testing.T) {
-	arg := "bla"
+	var arg strings.Builder
+	arg.WriteString("bla")
 
 	for i := 0; i < 256; i++ {
-		arg += string(rune(i))
+		arg.WriteString(string(rune(i)))
 	}
 
-	_, err := shsprintf.Sprintf(`cmd --arg=%s`, shsprintf.EscapeDefaultContext(arg))
+	_, err := shsprintf.Sprintf(`cmd --arg=%s`, shsprintf.EscapeDefaultContext(arg.String()))
 
 	if err != nil {
 		t.Errorf("Unexpected Sprintf error: %v", err)
