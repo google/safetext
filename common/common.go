@@ -109,7 +109,8 @@ func DeepCopyMutateStrings(data any, mutateF func(string) string) any {
 			}
 		}
 	case reflect.String:
-		return mutateF(reflect.ValueOf(data).String())
+		mutated := mutateF(reflect.ValueOf(data).String())
+		return reflect.ValueOf(mutated).Convert(reflect.TypeOf(data)).Interface()
 	case reflect.Slice, reflect.Array:
 		rc := reflect.MakeSlice(reflect.TypeOf(data), reflect.ValueOf(data).Len(), reflect.ValueOf(data).Len())
 		for i := 0; i < reflect.ValueOf(data).Len(); i++ {

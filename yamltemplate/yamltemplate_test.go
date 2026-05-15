@@ -299,7 +299,7 @@ func sanitize(input any) string {
 }
 
 func TestSafetextYamltemplateNegativeFuncMap(t *testing.T) {
-	var funcMap = map[string]any{
+	funcMap := map[string]any{
 		"sanitize": sanitize,
 	}
 
@@ -493,7 +493,7 @@ func readFile(path string) string {
 }
 
 func TestSafetextYamltemplateManualAnnotation(t *testing.T) {
-	var funcMap = map[string]any{
+	funcMap := map[string]any{
 		"readFile": readFile,
 	}
 
@@ -633,5 +633,103 @@ func TestReproDeadlock(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Error("Deadlock detected: Second execution timed out")
 		return
+	}
+}
+
+func TestCustomTypes(t *testing.T) {
+	type UID string
+
+	type ObjectMeta struct {
+		Name string
+		UID  UID
+	}
+
+	type Outer struct {
+		ObjectMeta
+		ObjectMetas []ObjectMeta
+	}
+
+	funcMap := template.FuncMap{
+		"passThrough": func(_ ObjectMeta) string { return "safe" },
+	}
+	yamlTemplate := `
+name: {{ .ObjectMeta.Name }}
+type: {{ passThrough .ObjectMeta }}
+`
+	tmpl := template.Must(template.New("test").Funcs(funcMap).Parse(yamlTemplate))
+
+	var buf bytes.Buffer
+	err := tmpl.Execute(&buf, Outer{ObjectMeta: ObjectMeta{Name: "test", UID: "123"}})
+	if err != nil {
+		t.Errorf("tmpl.Execute() error = %v", err)
+	}
+
+	wanted := "name: test\ntype: safe\n"
+	if buf.String() != wanted {
+		t.Errorf("tmpl.Execute() got %q, want %q", buf.String(), wanted)
+	}
+}
+
+func TestCustomTypeInSlice(t *testing.T) {
+	type UID string
+
+	type ObjectMeta struct {
+		Name string
+		UID  UID
+	}
+
+	type Outer struct {
+		ObjectMetas []ObjectMeta
+	}
+
+	funcMap := template.FuncMap{
+		"passThrough": func(_ ObjectMeta) string { return "safe" },
+	}
+
+	tests := []struct {
+		name         string
+		tmplText     string
+		data         any
+		want         string
+		wantErr      bool
+		expectNoDiff bool
+	}{
+		{
+			name: "basic slice",
+			tmplText: `
+types:
+{{- range .ObjectMetas }}
+- {{ passThrough . }}
+{{- end }}
+`,
+			data: Outer{
+				ObjectMetas: []ObjectMeta{
+					{Name: "a", UID: "uid-a"},
+					{Name: "b", UID: "uid-b"},
+				},
+			},
+			want: "types:\n- safe\n- safe\n",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			tmpl := template.Must(template.New("test").Funcs(funcMap).Parse(test.tmplText))
+
+			var buf bytes.Buffer
+			err := tmpl.Execute(&buf, test.data)
+
+			if (err != nil) != test.wantErr {
+				t.Errorf("tmpl.Execute(%v) got error %v, want error presence %v", test.data, err, test.wantErr)
+			}
+
+			if test.wantErr || test.expectNoDiff {
+				return
+			}
+
+			if buf.String() != test.want {
+				t.Errorf("tmpl.Execute(%v) got %q, want %q", test.data, buf.String(), test.want)
+			}
+		})
 	}
 }
