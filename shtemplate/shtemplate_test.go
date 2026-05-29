@@ -318,6 +318,56 @@ fi`,
 			},
 			err: template.ErrShInjection,
 		},
+
+		// Command injection via a newline-separated statement inserted into a
+		// *nested* statement list (subshell). The top-level statement count is
+		// unchanged, so this is only caught if nested statement arrays also
+		// verify their length. A newline separator is used because the mutation
+		// pass doubles it to "\n\n", which stays valid shell (unlike ";").
+		{
+			tmplText: "(echo {{ .addressee }})",
+			replacements: map[any]any{
+				"addressee": "foo\ncommand",
+			},
+			err: template.ErrShInjection,
+		},
+
+		// Same, inside a brace block.
+		{
+			tmplText: "{ echo {{ .addressee }}; }",
+			replacements: map[any]any{
+				"addressee": "foo\ncommand",
+			},
+			err: template.ErrShInjection,
+		},
+
+		// Same, inside a command substitution.
+		{
+			tmplText: "out=$(grep {{ .addressee }})",
+			replacements: map[any]any{
+				"addressee": "foo\ncommand",
+			},
+			err: template.ErrShInjection,
+		},
+
+		// Same, inside an if-body.
+		{
+			tmplText: "if true; then echo {{ .addressee }}; fi",
+			replacements: map[any]any{
+				"addressee": "foo\ncommand",
+			},
+			err: template.ErrShInjection,
+		},
+
+		// Cross-check: a legitimate value inside a nested statement list must
+		// still pass after adding the length checks.
+		{
+			tmplText: "(echo {{ .addressee }})",
+			replacements: map[any]any{
+				"addressee": "hello",
+			},
+			err: nil,
+		},
 	}
 
 	for _, tc := range testCases {

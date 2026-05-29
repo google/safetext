@@ -31,8 +31,8 @@ import (
 	"unicode/utf8"
 
 	"github.com/google/safetext/common"
-	"mvdan.cc/sh/v3/syntax"
 	"github.com/pborman/uuid"
+	"mvdan.cc/sh/v3/syntax"
 )
 
 // ErrInvalidShTemplate indicates the requested template is not a valid script
@@ -787,6 +787,10 @@ func redirectsMatch(a, b, c *syntax.Redirect) bool {
 }
 
 func redirectsArrayMatch(a, b, c []*syntax.Redirect) bool {
+	if len(b) != len(a) || len(c) != len(a) {
+		return false
+	}
+
 	for i := range a {
 		if !redirectsMatch(a[i], b[i], c[i]) {
 			return false
@@ -825,6 +829,10 @@ func statementsMatch(a, b, c *syntax.Stmt) bool {
 }
 
 func statementsArrayMatch(a, b, c []*syntax.Stmt) bool {
+	if len(b) != len(a) || len(c) != len(a) {
+		return false
+	}
+
 	for i := range a {
 		if !statementsMatch(a[i], b[i], c[i]) {
 			return false
