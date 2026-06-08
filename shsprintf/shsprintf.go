@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"reflect"
 	"regexp"
+	"slices"
 	"strings"
 	"unicode/utf8"
 
@@ -535,10 +536,8 @@ func verifyStrings(a, b string, ctx wordComparisonContext) bool {
 		re := regexp.MustCompile(aPat)
 		insertedContent := re.FindStringSubmatch(b)[1:]
 
-		for _, g := range insertedContent {
-			if literalInjection(g) {
-				return false
-			}
+		if slices.ContainsFunc(insertedContent, literalInjection) {
+			return false
 		}
 	}
 
