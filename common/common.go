@@ -130,7 +130,7 @@ func DeepCopyMutateStrings(data any, mutateF func(string) string) any {
 		t := reflect.TypeOf(data)
 		v := reflect.ValueOf(data)
 		n := v.NumField()
-		for i := 0; i < n; i++ {
+		for i := range n {
 			r, _ := utf8.DecodeRuneInString(t.Field(i).Name)
 
 			// Don't copy unexported fields

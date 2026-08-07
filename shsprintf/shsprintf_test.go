@@ -456,7 +456,7 @@ func TestSafetextShsprintfEscape(t *testing.T) {
 	var arg strings.Builder
 	arg.WriteString("bla")
 
-	for i := 0; i < 256; i++ {
+	for i := range 256 {
 		arg.WriteString(string(rune(i)))
 	}
 

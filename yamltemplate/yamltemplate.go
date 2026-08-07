@@ -133,7 +133,7 @@ func allKeysMatch(base any, a any, b any) bool {
 		}
 	case reflect.Struct:
 		n := reflect.ValueOf(base).NumField()
-		for i := 0; i < n; i++ {
+		for i := range n {
 			baseit := reflect.TypeOf(base).Field(i)
 			ait := reflect.TypeOf(a).Field(i)
 			bit := reflect.TypeOf(b).Field(i)
