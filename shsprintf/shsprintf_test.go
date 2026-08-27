@@ -15,6 +15,7 @@
 package shsprintf_test
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
@@ -464,5 +465,18 @@ func TestSafetextShsprintfEscape(t *testing.T) {
 
 	if err != nil {
 		t.Errorf("Unexpected Sprintf error: %v", err)
+	}
+}
+
+func TestSafetextShsprintfInvalidTemplate(t *testing.T) {
+	_, err := shsprintf.Sprintf("echo 'unclosed %s", "hello")
+	if err == nil {
+		t.Fatalf("Got nil, expected error for invalid shell template")
+	}
+	if !errors.Is(err, shsprintf.ErrInvalidShTemplate) {
+		t.Errorf("Got error %v, expected it to wrap ErrInvalidShTemplate", err)
+	}
+	if err.Error() == shsprintf.ErrInvalidShTemplate.Error() {
+		t.Errorf("Got error %v, expected it to contain underlying parser error details", err)
 	}
 }

@@ -950,7 +950,7 @@ func SprintfLang(format string, lang syntax.LangVariant, a ...any) (string, erro
 
 	parsedBaselineResult, err := syntax.NewParser(syntax.Variant(lang), syntax.KeepComments(true)).Parse(strings.NewReader(baselineResult), "template.sh")
 	if err != nil {
-		return "", ErrInvalidShTemplate
+		return "", fmt.Errorf("%w: %w", ErrInvalidShTemplate, err)
 	}
 
 	requestedResult := fmt.Sprintf(format, a...)
