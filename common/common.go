@@ -110,8 +110,17 @@ func DeepCopyMutateStrings(data any, mutateF func(string) string) any {
 		}
 	case reflect.String:
 		return mutateF(reflect.ValueOf(data).String())
-	case reflect.Slice, reflect.Array:
+	case reflect.Slice:
+		if reflect.ValueOf(data).IsNil() {
+			return data
+		}
 		rc := reflect.MakeSlice(reflect.TypeOf(data), reflect.ValueOf(data).Len(), reflect.ValueOf(data).Len())
+		for i := 0; i < reflect.ValueOf(data).Len(); i++ {
+			rc.Index(i).Set(reflect.ValueOf(DeepCopyMutateStrings(reflect.ValueOf(data).Index(i).Interface(), mutateF)))
+		}
+		r = rc.Interface()
+	case reflect.Array:
+		rc := reflect.New(reflect.TypeOf(data)).Elem()
 		for i := 0; i < reflect.ValueOf(data).Len(); i++ {
 			rc.Index(i).Set(reflect.ValueOf(DeepCopyMutateStrings(reflect.ValueOf(data).Index(i).Interface(), mutateF)))
 		}
@@ -140,7 +149,7 @@ func DeepCopyMutateStrings(data any, mutateF func(string) string) any {
 			}
 		}
 
-		r = s.Interface()
+		r = reflect.Indirect(s).Interface()
 	default:
 		// No other types need special handling (int, bool, etc)
 		r = data

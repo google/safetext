@@ -635,3 +635,39 @@ func TestReproDeadlock(t *testing.T) {
 		return
 	}
 }
+
+func TestArrayFieldHandling(t *testing.T) {
+	type Item struct {
+		Name   string
+		ID     [4]byte
+		Values [3]string
+	}
+	type Data struct {
+		Items []Item
+	}
+
+	tmplText := `
+items:
+{{- range .Items }}
+  - name: {{ .Name }}
+    first_value: {{ index .Values 0 }}
+{{- end }}
+`
+	tmpl, err := template.New("test-array").Parse(tmplText)
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+
+	d := Data{
+		Items: []Item{
+			{Name: "item1", ID: [4]byte{1, 2, 3, 4}, Values: [3]string{"val1", "val2", "val3"}},
+			{Name: "item2", ID: [4]byte{5, 6, 7, 8}, Values: [3]string{"val4", "val5", "val6"}},
+		},
+	}
+
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, d); err != nil {
+		t.Fatalf("Execute failed with array field: %v", err)
+	}
+}
+
