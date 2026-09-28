@@ -636,6 +636,46 @@ func TestReproDeadlock(t *testing.T) {
 	}
 }
 
+func TestArrayFieldHandling(t *testing.T) {
+	type Item struct {
+		Name   string
+		ID     [4]byte
+		Values [3]string
+	}
+	type Data struct {
+		Items []Item
+	}
+
+	tmplText := `
+items:
+{{- range .Items }}
+  - name: {{ .Name }}
+    first_value: {{ index .Values 0 }}
+{{- end }}
+`
+	tmpl, err := template.New("test-array").Parse(tmplText)
+	if err != nil {
+		t.Fatalf("template.New(\"test-array\").Parse(%q) failed: %v", tmplText, err)
+	}
+
+	d := Data{
+		Items: []Item{
+			{Name: "item1", ID: [4]byte{1, 2, 3, 4}, Values: [3]string{"val1", "val2", "val3"}},
+			{Name: "item2", ID: [4]byte{5, 6, 7, 8}, Values: [3]string{"val4", "val5", "val6"}},
+		},
+	}
+
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, d); err != nil {
+		t.Fatalf("Execute failed with array field: %v", err)
+	}
+
+	want := "\nitems:\n  - name: item1\n    first_value: val1\n  - name: item2\n    first_value: val4\n"
+	if got := buf.String(); got != want {
+		t.Errorf("tmpl.Execute() got %q, want %q", got, want)
+	}
+}
+
 func TestCustomTypes(t *testing.T) {
 	type UID string
 
@@ -664,7 +704,7 @@ type: {{ passThrough .ObjectMeta }}
 		t.Errorf("tmpl.Execute() error = %v", err)
 	}
 
-	wanted := "name: test\ntype: safe\n"
+	wanted := "\nname: test\ntype: safe\n"
 	if buf.String() != wanted {
 		t.Errorf("tmpl.Execute() got %q, want %q", buf.String(), wanted)
 	}
@@ -708,7 +748,7 @@ types:
 					{Name: "b", UID: "uid-b"},
 				},
 			},
-			want: "types:\n- safe\n- safe\n",
+			want: "\ntypes:\n- safe\n- safe\n",
 		},
 	}
 

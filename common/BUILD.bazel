@@ -19,3 +19,10 @@ alias(
     actual = ":common",
     visibility = ["//visibility:public"],
 )
+
+go_test(
+    name = "common_test",
+    size = "small",
+    srcs = ["common_test.go"],
+    embed = [":common"],
+)

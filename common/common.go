@@ -94,54 +94,62 @@ func DeepCopyMutateStrings(data any, mutateF func(string) string) any {
 		return nil
 	}
 
-	switch reflect.TypeOf(data).Kind() {
+	value := reflect.ValueOf(data)
+	valueType := reflect.TypeOf(data)
+
+	switch value.Kind() {
 	case reflect.Pointer:
-		p := reflect.ValueOf(data)
-		if p.IsNil() {
+		if value.IsNil() {
 			r = data
 		} else {
 			c := DeepCopyMutateStrings(dereference(data), mutateF)
 			r = makePointer(c)
 
 			// Sometimes we accidentally introduce one too many layers of indirection (seems related to protobuf generated fields like ReleaseNamespace *ReleaseNamespace `... reflect:"unexport"`)
-			if reflect.TypeOf(r) != reflect.TypeOf(data) {
+			if reflect.TypeOf(r) != valueType {
 				r = c
 			}
 		}
 	case reflect.String:
-		mutated := mutateF(reflect.ValueOf(data).String())
-		return reflect.ValueOf(mutated).Convert(reflect.TypeOf(data)).Interface()
+		mutated := mutateF(value.String())
+		return reflect.ValueOf(mutated).Convert(valueType).Interface()
 	case reflect.Slice, reflect.Array:
-		rc := reflect.MakeSlice(reflect.TypeOf(data), reflect.ValueOf(data).Len(), reflect.ValueOf(data).Len())
-		for i := 0; i < reflect.ValueOf(data).Len(); i++ {
-			rc.Index(i).Set(reflect.ValueOf(DeepCopyMutateStrings(reflect.ValueOf(data).Index(i).Interface(), mutateF)))
+		var rc reflect.Value
+		if value.Kind() == reflect.Slice {
+			if value.IsNil() {
+				return data
+			}
+			rc = reflect.MakeSlice(valueType, value.Len(), value.Len())
+		} else {
+			rc = reflect.New(valueType).Elem()
+		}
+		for i := range value.Len() {
+			rc.Index(i).Set(reflect.ValueOf(DeepCopyMutateStrings(value.Index(i).Interface(), mutateF)))
 		}
 		r = rc.Interface()
 	case reflect.Map:
-		rc := reflect.MakeMap(reflect.TypeOf(data))
-		dataIter := reflect.ValueOf(data).MapRange()
+		rc := reflect.MakeMap(valueType)
+		dataIter := value.MapRange()
 		for dataIter.Next() {
 			rc.SetMapIndex(dataIter.Key(), reflect.ValueOf(DeepCopyMutateStrings(dataIter.Value().Interface(), mutateF)))
 		}
 		r = rc.Interface()
 	case reflect.Struct:
-		s := reflect.New(reflect.TypeOf(data))
+		s := reflect.New(valueType)
 
-		t := reflect.TypeOf(data)
-		v := reflect.ValueOf(data)
-		n := v.NumField()
+		n := value.NumField()
 		for i := range n {
-			r, _ := utf8.DecodeRuneInString(t.Field(i).Name)
+			r, _ := utf8.DecodeRuneInString(valueType.Field(i).Name)
 
 			// Don't copy unexported fields
 			if unicode.IsUpper(r) {
 				reflect.Indirect(s).Field(i).Set(
-					reflect.ValueOf(DeepCopyMutateStrings(v.Field(i).Interface(), mutateF)),
+					reflect.ValueOf(DeepCopyMutateStrings(value.Field(i).Interface(), mutateF)),
 				)
 			}
 		}
 
-		r = s.Interface()
+		r = reflect.Indirect(s).Interface()
 	default:
 		// No other types need special handling (int, bool, etc)
 		r = data
