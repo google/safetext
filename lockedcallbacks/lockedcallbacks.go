@@ -118,7 +118,7 @@ func (m *StatesMap) BuildAllowFlagsCallbackFunc(safeTmplUUID string, wrapperFunc
 
 // SetAndExecuteWithCallback hides implementation details of the StatesMap by taking a template and
 // a callback to set the proper callback and execute the template.
-func (m *StatesMap) SetAndExecuteWithCallback(tmpl *template.Template, safeTmplUUID string, cb func(string) string, result io.Writer, data any) error {
+func (m *StatesMap) SetAndExecuteWithCallback(tmpl *template.Template, safeTmplUUID string, cb func(string) string, result io.Writer, data any) (err error) {
 	tmplState := m.lock(safeTmplUUID)
 	defer tmplState.unlock()
 	tmplState.Callback = cb
@@ -128,7 +128,7 @@ func (m *StatesMap) SetAndExecuteWithCallback(tmpl *template.Template, safeTmplU
 
 // SetAndExecuteWithShCallback hides implementation details of the StatesMap by taking a template
 // and both callbacks to set the proper callback and execute the template.
-func (m *StatesMap) SetAndExecuteWithShCallback(tmpl *template.Template, safeTmplUUID string, cb func(string) string, allowFlagsCb func(string) string, result io.Writer, data any) error {
+func (m *StatesMap) SetAndExecuteWithShCallback(tmpl *template.Template, safeTmplUUID string, cb func(string) string, allowFlagsCb func(string) string, result io.Writer, data any) (err error) {
 	tmplState := m.lock(safeTmplUUID)
 	defer tmplState.unlock()
 	tmplState.Callback = cb
