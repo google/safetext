@@ -318,6 +318,24 @@ fi`,
 			},
 			err: template.ErrShInjection,
 		},
+
+		// Command injection via plain field access (control for the ChainNode case below)
+		{
+			tmplText: "echo {{ .addressee }}",
+			replacements: map[any]any{
+				"addressee": "a; rm -rf /",
+			},
+			err: template.ErrShInjection,
+		},
+
+		// Command injection via ChainNode field access must not bypass detection
+		{
+			tmplText: "echo {{ (.).addressee }}",
+			replacements: map[any]any{
+				"addressee": "a; rm -rf /",
+			},
+			err: template.ErrShInjection,
+		},
 	}
 
 	for _, tc := range testCases {

@@ -163,7 +163,7 @@ func applyPipeCmds(cmds []*parse.CommandNode) {
 		newArgs := make([]parse.Node, 0)
 		for i, a := range c.Args {
 			switch a := a.(type) {
-			case *parse.DotNode, *parse.FieldNode, *parse.VariableNode:
+			case *parse.DotNode, *parse.FieldNode, *parse.VariableNode, *parse.ChainNode:
 				if i == 0 && len(c.Args) > 1 {
 					// If this is the first "argument" of multiple, then it is really a function
 					newArgs = append(newArgs, a)

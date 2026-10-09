@@ -278,6 +278,24 @@ list:
 			},
 			err: true,
 		},
+
+		// Key injection via plain field access (control for the ChainNode case below)
+		{
+			tmplText: "k: {{ .X }}\n",
+			replacements: map[any]any{
+				"X": "v\ninjected: true",
+			},
+			err: true,
+		},
+
+		// Key injection via ChainNode field access must not bypass detection
+		{
+			tmplText: "k: {{ (.).X }}\n",
+			replacements: map[any]any{
+				"X": "v\ninjected: true",
+			},
+			err: true,
+		},
 	}
 
 	for _, tc := range testCases {
