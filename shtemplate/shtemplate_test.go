@@ -336,6 +336,24 @@ fi`,
 			},
 			err: template.ErrShInjection,
 		},
+
+		// Redirect injection
+		{
+			tmplText: "echo {{.X}}",
+			replacements: map[any]any{
+				"X": "arg > /tmp/pwn",
+			},
+			err: template.ErrShInjection,
+		},
+
+		// Extra statement injection inside a nested block
+		{
+			tmplText: "if true; then\necho {{.X}}\nfi",
+			replacements: map[any]any{
+				"X": "a\nrm -rf /tmp/victim",
+			},
+			err: template.ErrShInjection,
+		},
 	}
 
 	for _, tc := range testCases {
