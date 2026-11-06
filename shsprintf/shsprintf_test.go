@@ -113,6 +113,7 @@ func TestSafetextShsprintf(t *testing.T) {
 end=$((SECONDS+%d))
 
 while [ $SECONDS -lt $end ]; do
+:
 done`,
 			replacements: []any{
 				3,
@@ -334,6 +335,260 @@ fi`,
 			replacements: []any{
 				"./--some-param=value",
 				"*value",
+			},
+			err: shsprintf.ErrShInjection,
+		},
+
+		// Argument injection via backslash escape: bash removes the backslash,
+		// so `rm \-rf` executes as `rm -rf`.
+		{
+			format: "rm %s",
+			replacements: []any{
+				`\-rf`,
+			},
+			err: shsprintf.ErrShInjection,
+		},
+
+		// Argument injection via brace expansion: `rm {-rf,}` expands to `rm -rf`.
+		{
+			format: "rm %s",
+			replacements: []any{
+				"{-rf,}",
+			},
+			err: shsprintf.ErrShInjection,
+		},
+
+		{
+			format: "rm %s",
+			replacements: []any{
+				`{rf,bd}`,
+			},
+			err: shsprintf.ErrShInjection,
+		},
+
+		// Value within a brace expansion of the template: `rm {foo,-rf}` expands
+		// to `rm foo -rf`.
+		{
+			format: "rm {foo,%s}",
+			replacements: []any{
+				"-rf",
+			},
+			err: shsprintf.ErrShInjection,
+		},
+
+		// Brace expansion with a quoted element: `rm {"-rf",}` expands to `rm -rf`.
+		{
+			format: "rm %s",
+			replacements: []any{
+				`{"-rf",}`,
+			},
+			err: shsprintf.ErrShInjection,
+		},
+
+		// An escaped backslash is passed literally (`\-rf`), so no flag is injected.
+		{
+			format: "rm %s",
+			replacements: []any{
+				`\\-rf`,
+			},
+			err: nil,
+		},
+
+		// Backslashes not preceding a dash are fine.
+		{
+			format: "echo %s",
+			replacements: []any{
+				`a\b`,
+			},
+			err: nil,
+		},
+
+		// Braces without a comma or sequence are not expanded.
+		{
+			format: "echo %s",
+			replacements: []any{
+				"{foo}",
+			},
+			err: nil,
+		},
+
+		// Braces are not expanded within double quotes.
+		{
+			format: `echo "%s"`,
+			replacements: []any{
+				"{-rf,}",
+			},
+			err: nil,
+		},
+
+		// Brace expansions in the template itself are fine.
+		{
+			format: "cp %s{,.bak}",
+			replacements: []any{
+				"file",
+			},
+			err: nil,
+		},
+
+		// Sequence brace expansions in the template itself are fine.
+		{
+			format: "echo {1..3}%s",
+			replacements: []any{
+				"a",
+			},
+			err: nil,
+		},
+
+		// `rm x{foo,-rf}` expands to `rm xfoo x-rf`, so no flag is injected.
+		{
+			format: "rm x{foo,%s}",
+			replacements: []any{
+				"-rf",
+			},
+			err: nil,
+		},
+
+		// `rm {,x}-rf` expands to `rm -rf x-rf`: an empty brace element exposes
+		// the value at the start of an argument.
+		{
+			format: "rm {,x}%s",
+			replacements: []any{
+				"-rf",
+			},
+			err: shsprintf.ErrShInjection,
+		},
+
+		// A parameter expansion may be empty, so the value may start the argument.
+		{
+			format: `rm "$y"%s`,
+			replacements: []any{
+				"-rf",
+			},
+			err: shsprintf.ErrShInjection,
+		},
+
+		// A backslash within double quotes is preserved, so `rm "\-rf"` passes `\-rf`.
+		{
+			format: `rm "%s"`,
+			replacements: []any{
+				`\-rf`,
+			},
+			err: nil,
+		},
+
+		// ANSI-C quoting: `$'\x2drf'` is `-rf`.
+		{
+			format: `rm $'%s'`,
+			replacements: []any{
+				`\x2drf`,
+			},
+			err: shsprintf.ErrShInjection,
+		},
+
+		// Brace expansion injected within a command substitution.
+		{
+			format: "echo $(rm %s)",
+			replacements: []any{
+				"{-rf,}",
+			},
+			err: shsprintf.ErrShInjection,
+		},
+
+		// Variable assignments do not undergo brace expansion in bash.
+		{
+			format: "x=%s",
+			replacements: []any{
+				"{-rf,}",
+			},
+			err: nil,
+		},
+
+		// Unindexed array elements undergo brace expansion in bash.
+		{
+			format: "x=(%s)",
+			replacements: []any{
+				"{a,b}",
+			},
+			err: shsprintf.ErrShInjection,
+		},
+
+		// Indexed array elements do not undergo brace expansion in bash.
+		{
+			format: "x=([0]=%s)",
+			replacements: []any{
+				"{-rf,}",
+			},
+			err: nil,
+		},
+
+		// Items in a for loop undergo brace expansion in bash.
+		{
+			format: "for x in %s; do echo $x; done",
+			replacements: []any{
+				"{a,b}",
+			},
+			err: shsprintf.ErrShInjection,
+		},
+
+		// Arguments to export/declare undergo brace expansion in bash.
+		{
+			format: "export x=%s",
+			replacements: []any{
+				"{a,b}",
+			},
+			err: shsprintf.ErrShInjection,
+		},
+
+		// Ambiguous redirects through brace expansion is blocked.
+		{
+			format: "echo foo > %s",
+			replacements: []any{
+				"{a,b}",
+			},
+			err: shsprintf.ErrShInjection,
+		},
+
+		// Turning a list brace expansion into a sequence brace expansion.
+		{
+			format: "echo {1..%s,b}x",
+			replacements: []any{
+				"2}",
+			},
+			err: shsprintf.ErrShInjection,
+		},
+
+		// Here-document bodies do not undergo brace expansion in bash.
+		{
+			format: "cat << EOF\n%s\nEOF\n",
+			replacements: []any{
+				"{\n  \"live-restore\": true,\n  \"log-opts\": {\n    \"max-size\": \"1g\"\n  }\n}",
+			},
+			err: nil,
+		},
+
+		// Indented here-document bodies do not undergo brace expansion in bash.
+		{
+			format: "cat <<- EOF\n%s\nEOF\n",
+			replacements: []any{
+				"{-rf,}",
+			},
+			err: nil,
+		},
+
+		// Here-strings do not undergo brace expansion in bash.
+		{
+			format: "cat <<< %s",
+			replacements: []any{
+				"{-rf,}",
+			},
+			err: nil,
+		},
+
+		// Brace expansion injected within a command substitution in a here-document.
+		{
+			format: "cat << EOF\n$(rm %s)\nEOF\n",
+			replacements: []any{
+				"{-rf,}",
 			},
 			err: shsprintf.ErrShInjection,
 		},

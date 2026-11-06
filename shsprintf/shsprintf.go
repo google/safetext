@@ -480,9 +480,8 @@ func testExprMatch(a, b syntax.TestExpr) bool {
 type wordComparisonContext int
 
 const (
-	matchStructure      wordComparisonContext = 0
-	forbidFlagInjection wordComparisonContext = 1 << 0
-	literal             wordComparisonContext = 1 << 1
+	matchStructure wordComparisonContext = 0
+	literal        wordComparisonContext = 1 << 0
 )
 
 func wordsArrayMatch(a, b []*syntax.Word, ctx wordComparisonContext) bool {
@@ -525,12 +524,6 @@ func verifyStrings(a, b string, ctx wordComparisonContext) bool {
 		return false
 	}
 
-	if ctx&forbidFlagInjection != 0 {
-		if flagInjected(a, b) {
-			return false
-		}
-	}
-
 	if ctx&literal != 0 {
 		// Repeat matching to capture subgroups (untrusted insertions)
 		re := regexp.MustCompile(aPat)
@@ -542,10 +535,6 @@ func verifyStrings(a, b string, ctx wordComparisonContext) bool {
 	}
 
 	return true
-}
-
-func flagInjected(a, b string) bool {
-	return !strings.HasPrefix(a, "-") && strings.HasPrefix(b, "-")
 }
 
 // Check for unescaped ? * ! characters
@@ -620,6 +609,10 @@ func wordPartsMatch(a, b syntax.WordPart, ctx wordComparisonContext) bool {
 			return false
 		}
 	case *syntax.BraceExp:
+		if b.(*syntax.BraceExp).Sequence != a.Sequence {
+			return false
+		}
+
 		if !wordsArrayMatch(a.Elems, b.(*syntax.BraceExp).Elems, ctx) {
 			return false
 		}
@@ -643,15 +636,16 @@ func commandsMatch(a, b syntax.Command) bool {
 			return false
 		}
 
-		// First "argument" is command name
-		context := matchStructure
 		for i := 0; i < len(cmd.Args); i++ {
-			if !wordsMatch(cmd.Args[i].Parts, b.(*syntax.CallExpr).Args[i].Parts, context) {
+			argA, argB := cmd.Args[i].Parts, b.(*syntax.CallExpr).Args[i].Parts
+			if !wordsMatch(argA, argB, matchStructure) {
 				return false
 			}
 
 			// For subsequent arguments, also check for flag injection
-			context = forbidFlagInjection
+			if i > 0 && !common.CanStartWithDash(argA) && common.CanStartWithDash(argB) {
+				return false
+			}
 		}
 	case *syntax.IfClause:
 		if !statementsArrayMatch(cmd.Cond, b.(*syntax.IfClause).Cond) {
@@ -958,6 +952,9 @@ func SprintfLang(format string, lang syntax.LangVariant, a ...any) (string, erro
 	if err != nil {
 		return "", ErrShInjection
 	}
+
+	common.SplitBracesInPlace(parsedBaselineResult)
+	common.SplitBracesInPlace(parsedRequestedResult)
 
 	if !scriptsMatch(parsedBaselineResult, parsedRequestedResult) {
 		return "", ErrShInjection

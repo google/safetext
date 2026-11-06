@@ -1,4 +1,7 @@
-module(name = "safetext")
+module(
+    name = "safetext",
+    version = "0.1.0",
+)
 
 bazel_dep(name = "rules_go", version = "0.63.0", repo_name = "io_bazel_rules_go")
 bazel_dep(name = "gazelle", version = "0.54.0", repo_name = "bazel_gazelle")

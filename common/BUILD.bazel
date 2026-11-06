@@ -10,7 +10,8 @@ go_library(
     importpath = "github.com/google/safetext/common",
     visibility = ["//visibility:public"],
     deps = [
-      "//lockedcallbacks",
+        "//lockedcallbacks",
+        "@cc_mvdan_sh_v3//syntax",
     ],
 )
 

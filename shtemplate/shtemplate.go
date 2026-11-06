@@ -476,9 +476,8 @@ func testExprMatch(a, b, c syntax.TestExpr) bool {
 type wordComparisonContext int
 
 const (
-	matchExactly        wordComparisonContext = 0
-	forbidFlagInjection wordComparisonContext = 1
-	justStructure       wordComparisonContext = 2
+	matchExactly wordComparisonContext = iota
+	justStructure
 )
 
 func wordsArrayMatch(a, b, c []*syntax.Word, ctx wordComparisonContext) bool {
@@ -510,22 +509,11 @@ func wordsMatch(a, b, c []syntax.WordPart, ctx wordComparisonContext) bool {
 }
 
 func verifyStrings(a, b, c string, ctx wordComparisonContext) bool {
-	switch ctx {
-	case matchExactly:
-		if b != a || c != a {
-			return false
-		}
-	case forbidFlagInjection:
-		if flagInjected(a, b, c) {
-			return false
-		}
+	if ctx == matchExactly && (b != a || c != a) {
+		return false
 	}
 
 	return true
-}
-
-func flagInjected(a, b, c string) bool {
-	return !strings.HasPrefix(a, "-") && (strings.HasPrefix(b, "-") || strings.HasPrefix(c, "-"))
 }
 
 // Check for introduction or removal of ? * + @ ! characters
@@ -592,6 +580,10 @@ func wordPartsMatch(a, b, c syntax.WordPart, ctx wordComparisonContext) bool {
 			return false
 		}
 	case *syntax.BraceExp:
+		if b.(*syntax.BraceExp).Sequence != a.Sequence || c.(*syntax.BraceExp).Sequence != a.Sequence {
+			return false
+		}
+
 		if !wordsArrayMatch(a.Elems, b.(*syntax.BraceExp).Elems, c.(*syntax.BraceExp).Elems, ctx) {
 			return false
 		}
@@ -618,12 +610,16 @@ func commandsMatch(a, b, c syntax.Command) bool {
 		// First "argument" is command name
 		context := matchExactly
 		for i := 0; i < len(cmd.Args); i++ {
-			if !wordsMatch(cmd.Args[i].Parts, b.(*syntax.CallExpr).Args[i].Parts, c.(*syntax.CallExpr).Args[i].Parts, context) {
+			argA, argB, argC := cmd.Args[i].Parts, b.(*syntax.CallExpr).Args[i].Parts, c.(*syntax.CallExpr).Args[i].Parts
+			if !wordsMatch(argA, argB, argC, context) {
 				return false
 			}
 
-			// For subsequent arguments, just check for argument inject
-			context = forbidFlagInjection
+			// For subsequent arguments, just check for argument injection
+			if i > 0 && !common.CanStartWithDash(argA) && (common.CanStartWithDash(argB) || common.CanStartWithDash(argC)) {
+				return false
+			}
+			context = justStructure
 		}
 
 	case *syntax.IfClause:
@@ -924,6 +920,10 @@ func (t *Template) Execute(wr io.Writer, data any) (err error) {
 	}
 
 	// Compare results
+	common.SplitBracesInPlace(parsedBaselineResult)
+	common.SplitBracesInPlace(parsedRequestedResult)
+	common.SplitBracesInPlace(parsedMutatedResult)
+
 	if !scriptsMatch(parsedBaselineResult, parsedRequestedResult, parsedMutatedResult) {
 		return ErrShInjection
 	}

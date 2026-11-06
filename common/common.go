@@ -18,12 +18,15 @@ package common
 import (
 	"io"
 	"reflect"
+	"slices"
+	"strings"
 	"text/template"
 	"text/template/parse"
 	"unicode"
 	"unicode/utf8"
 
 	"github.com/google/safetext/lockedcallbacks"
+	"mvdan.cc/sh/v3/syntax"
 )
 
 const textTemplateRemediationFuncName = "ApplyInjectionDetection"
@@ -241,4 +244,139 @@ func WalkApplyFuncToNonDeclaractiveActions(template *template.Template, node par
 			template.AddParseTree(node.Name, treeCopy)
 		}
 	}
+}
+
+// removeSingleBackslash removes the backslash escaping that bash strips from an
+// unquoted literal during quote removal (e.g. `\-rf` becomes `-rf`).
+func removeSingleBackslash(s string) string {
+	if !strings.Contains(s, `\`) {
+		return s
+	}
+
+	var sb strings.Builder
+	for i := 0; i < len(s); i++ {
+		if s[i] == '\\' && i+1 < len(s) {
+			i++
+		}
+		sb.WriteByte(s[i])
+	}
+
+	return sb.String()
+}
+
+// SplitBracesInPlace rewrites the brace expansions (e.g. `{a,b}`) of words in
+// AST positions where bash performs brace expansion into BraceExp nodes, so
+// that they are compared structurally. The parser leaves them as literals
+// otherwise.
+func SplitBracesInPlace(f *syntax.File) {
+	// syntax.Walk does not support BraceExp nodes, so collect all words before
+	// modifying any of them.
+	var words []*syntax.Word
+	syntax.Walk(f, func(node syntax.Node) bool {
+		switch x := node.(type) {
+		case *syntax.CallExpr:
+			words = append(words, x.Args...)
+		case *syntax.WordIter:
+			words = append(words, x.Items...)
+		case *syntax.ArrayElem:
+			if x.Index == nil && x.Value != nil {
+				words = append(words, x.Value)
+			}
+		case *syntax.DeclClause:
+			for _, a := range x.Args {
+				if a.Value != nil {
+					words = append(words, a.Value)
+				}
+			}
+		case *syntax.Redirect:
+			if x.Word != nil && x.Op != syntax.Hdoc && x.Op != syntax.DashHdoc && x.Op != syntax.WordHdoc {
+				words = append(words, x.Word)
+			}
+		}
+		return true
+	})
+
+	for _, w := range words {
+		if syntax.SplitBraces(w) {
+			w.Parts = mergeAdjacentLits(w.Parts)
+		}
+	}
+}
+
+// mergeAdjacentLits merges consecutive literals. syntax.SplitBraces splits
+// literals around braces even when they do not expand (e.g. `{foo}` becomes
+// `{`, `foo`, `}`), which would otherwise change the number of word parts.
+func mergeAdjacentLits(parts []syntax.WordPart) []syntax.WordPart {
+	var merged []syntax.WordPart
+	for _, p := range parts {
+		if be, ok := p.(*syntax.BraceExp); ok {
+			for _, elem := range be.Elems {
+				elem.Parts = mergeAdjacentLits(elem.Parts)
+			}
+		}
+
+		lit, ok := p.(*syntax.Lit)
+		if !ok || len(merged) == 0 {
+			merged = append(merged, p)
+			continue
+		}
+
+		if prev, ok := merged[len(merged)-1].(*syntax.Lit); ok {
+			merged[len(merged)-1] = &syntax.Lit{ValuePos: prev.ValuePos, ValueEnd: lit.ValueEnd, Value: prev.Value + lit.Value}
+		} else {
+			merged = append(merged, p)
+		}
+	}
+
+	return merged
+}
+
+// CanStartWithDash reports whether any of the arguments bash produces from a
+// word (after brace expansion and quote removal) may start with '-'.
+func CanStartWithDash(parts []syntax.WordPart) bool {
+	_, dash := leadingDash(parts, false)
+	return dash
+}
+
+// leadingDash determines whether the first character of the given word parts
+// may be '-'. decided is false if all parts may expand to the empty string, in
+// which case the first character is determined by whatever follows.
+func leadingDash(parts []syntax.WordPart, quoted bool) (decided, dash bool) {
+	for i, p := range parts {
+		switch p := p.(type) {
+		case *syntax.Lit:
+			v := p.Value
+			if !quoted {
+				// Bash strips backslashes from unquoted literals, so `\-rf` is passed as `-rf`.
+				v = removeSingleBackslash(v)
+			}
+			if v != "" {
+				return true, v[0] == '-'
+			}
+		case *syntax.SglQuoted:
+			if p.Value != "" {
+				// In $'...' strings, escape sequences such as `\x2d` may produce a '-'.
+				return true, p.Value[0] == '-' || (p.Dollar && p.Value[0] == '\\')
+			}
+		case *syntax.DblQuoted:
+			if decided, dash := leadingDash(p.Parts, true); decided {
+				return true, dash
+			}
+		case *syntax.BraceExp:
+			// Each element starts a separate argument, followed by the rest of the word.
+			rest := parts[i+1:]
+			for _, elem := range p.Elems {
+				if _, dash := leadingDash(slices.Concat(elem.Parts, rest), quoted); dash {
+					return true, true
+				}
+			}
+			return true, false
+		default:
+			// Parameter expansions, command substitutions etc. are defined by the
+			// template, but may expand to the empty string, so whatever follows may
+			// end up at the start of the argument.
+		}
+	}
+
+	return false, false
 }

@@ -68,6 +68,7 @@ func TestSafetextShtemplate(t *testing.T) {
 end=$((SECONDS+{{.wait}}))
 
 while [ $SECONDS -lt $end ]; do
+:
 done`,
 			replacements: map[any]any{
 				"wait": 3,
@@ -134,7 +135,7 @@ fi`,
 
 		// Explicitly annotated command
 		{
-			tmplText: "echo $(({{ (StructuralData .addressee) }}))",
+			tmplText: "echo $({{ (StructuralData .addressee) }})",
 			replacements: map[any]any{
 				"addressee": "./command",
 			},
@@ -163,7 +164,7 @@ fi`,
 		// ====================================================
 		// Unannotated command
 		{
-			tmplText: "echo $(({{ .addressee }}))",
+			tmplText: "echo $({{ .addressee }})",
 			replacements: map[any]any{
 				"addressee": "./command",
 			},
@@ -351,6 +352,260 @@ fi`,
 			tmplText: "if true; then\necho {{.X}}\nfi",
 			replacements: map[any]any{
 				"X": "a\nrm -rf /tmp/victim",
+			},
+			err: template.ErrShInjection,
+		},
+
+		// Argument injection via backslash escape: bash removes the backslash,
+		// so `rm \-rf` executes as `rm -rf`.
+		{
+			tmplText: "rm {{.X}}",
+			replacements: map[any]any{
+				"X": `\-rf`,
+			},
+			err: template.ErrShInjection,
+		},
+
+		// Argument injection via brace expansion: `rm {-rf,}` expands to `rm -rf`.
+		{
+			tmplText: "rm {{.X}}",
+			replacements: map[any]any{
+				"X": "{-rf,}",
+			},
+			err: template.ErrShInjection,
+		},
+
+		{
+			tmplText: "rm {{.X}}",
+			replacements: map[any]any{
+				"X": `{rf,bd}`,
+			},
+			err: template.ErrShInjection,
+		},
+
+		// Value within a brace expansion of the template: `rm {foo,-rf}` expands
+		// to `rm foo -rf`.
+		{
+			tmplText: "rm {foo,{{.X}}}",
+			replacements: map[any]any{
+				"X": "-rf",
+			},
+			err: template.ErrShInjection,
+		},
+
+		// Brace expansion with a quoted element: `rm {"-rf",}` expands to `rm -rf`.
+		{
+			tmplText: "rm {{.X}}",
+			replacements: map[any]any{
+				"X": `{"-rf",}`,
+			},
+			err: template.ErrShInjection,
+		},
+
+		// An escaped backslash is passed literally (`\-rf`), so no flag is injected.
+		{
+			tmplText: "rm {{.X}}",
+			replacements: map[any]any{
+				"X": `\\-rf`,
+			},
+			err: nil,
+		},
+
+		// Backslashes not preceding a dash are fine.
+		{
+			tmplText: "echo {{.X}}",
+			replacements: map[any]any{
+				"X": `a\b`,
+			},
+			err: nil,
+		},
+
+		// Braces without a comma or sequence are not expanded.
+		{
+			tmplText: "echo {{.X}}",
+			replacements: map[any]any{
+				"X": "{foo}",
+			},
+			err: nil,
+		},
+
+		// Braces are not expanded within double quotes.
+		{
+			tmplText: `echo "{{.X}}"`,
+			replacements: map[any]any{
+				"X": "{-rf,}",
+			},
+			err: nil,
+		},
+
+		// Brace expansions in the template itself are fine.
+		{
+			tmplText: "cp {{.X}}{,.bak}",
+			replacements: map[any]any{
+				"X": "file",
+			},
+			err: nil,
+		},
+
+		// Sequence brace expansions in the template itself are fine.
+		{
+			tmplText: "echo {1..3}{{.X}}",
+			replacements: map[any]any{
+				"X": "a",
+			},
+			err: nil,
+		},
+
+		// `rm x{foo,-rf}` expands to `rm xfoo x-rf`, so no flag is injected.
+		{
+			tmplText: "rm x{foo,{{.X}}}",
+			replacements: map[any]any{
+				"X": "-rf",
+			},
+			err: nil,
+		},
+
+		// `rm {,x}-rf` expands to `rm -rf x-rf`: an empty brace element exposes
+		// the value at the start of an argument.
+		{
+			tmplText: "rm {,x}{{.X}}",
+			replacements: map[any]any{
+				"X": "-rf",
+			},
+			err: template.ErrShInjection,
+		},
+
+		// A parameter expansion may be empty, so the value may start the argument.
+		{
+			tmplText: `rm "$y"{{.X}}`,
+			replacements: map[any]any{
+				"X": "-rf",
+			},
+			err: template.ErrShInjection,
+		},
+
+		// A backslash within double quotes is preserved, so `rm "\-rf"` passes `\-rf`.
+		{
+			tmplText: `rm "{{.X}}"`,
+			replacements: map[any]any{
+				"X": `\-rf`,
+			},
+			err: nil,
+		},
+
+		// ANSI-C quoting: `$'\x2drf'` is `-rf`.
+		{
+			tmplText: `rm $'{{.X}}'`,
+			replacements: map[any]any{
+				"X": `\x2drf`,
+			},
+			err: template.ErrShInjection,
+		},
+
+		// Brace expansion injected within a command substitution.
+		{
+			tmplText: "echo $(rm {{.X}})",
+			replacements: map[any]any{
+				"X": "{-rf,}",
+			},
+			err: template.ErrShInjection,
+		},
+
+		// Variable assignments do not undergo brace expansion in bash.
+		{
+			tmplText: "x={{.X}}",
+			replacements: map[any]any{
+				"X": "{-rf,}",
+			},
+			err: nil,
+		},
+
+		// Unindexed array elements undergo brace expansion in bash.
+		{
+			tmplText: "x=({{.X}})",
+			replacements: map[any]any{
+				"X": "{a,b}",
+			},
+			err: template.ErrShInjection,
+		},
+
+		// Indexed array elements do not undergo brace expansion in bash.
+		{
+			tmplText: "x=([0]={{.X}})",
+			replacements: map[any]any{
+				"X": "{-rf,}",
+			},
+			err: nil,
+		},
+
+		// Items in a for loop undergo brace expansion in bash.
+		{
+			tmplText: "for x in {{.X}}; do echo $x; done",
+			replacements: map[any]any{
+				"X": "{a,b}",
+			},
+			err: template.ErrShInjection,
+		},
+
+		// Arguments to export/declare undergo brace expansion in bash.
+		{
+			tmplText: "export x={{.X}}",
+			replacements: map[any]any{
+				"X": "{a,b}",
+			},
+			err: template.ErrShInjection,
+		},
+
+		// Ambiguous redirects through brace expansion is blocked.
+		{
+			tmplText: "echo foo > {{.X}}",
+			replacements: map[any]any{
+				"X": "{a,b}",
+			},
+			err: template.ErrShInjection,
+		},
+
+		// Turning a list brace expansion into a sequence brace expansion.
+		{
+			tmplText: "echo {1..{{.X}},b}x",
+			replacements: map[any]any{
+				"X": "2}",
+			},
+			err: template.ErrShInjection,
+		},
+
+		// Here-document bodies do not undergo brace expansion in bash.
+		{
+			tmplText: "cat << EOF\n{\n  \"live-restore\": true,\n  \"hostname\": \"$(echo \"{{.X}}\")\"\n}\nEOF\n",
+			replacements: map[any]any{
+				"X": "{-rf,}",
+			},
+			err: nil,
+		},
+
+		// Indented here-document bodies do not undergo brace expansion in bash.
+		{
+			tmplText: "cat <<- EOF\n{\n  \"live-restore\": true,\n  \"hostname\": \"$(echo \"{{.X}}\")\"\n}\nEOF\n",
+			replacements: map[any]any{
+				"X": "{-rf,}",
+			},
+			err: nil,
+		},
+
+		// Here-strings do not undergo brace expansion in bash.
+		{
+			tmplText: "cat <<< {a,b}$(echo \"{{.X}}\")",
+			replacements: map[any]any{
+				"X": "{-rf,}",
+			},
+			err: nil,
+		},
+
+		// Brace expansion injected within a command substitution in a here-document.
+		{
+			tmplText: "cat << EOF\n$(rm {{.X}})\nEOF\n",
+			replacements: map[any]any{
+				"X": "{-rf,}",
 			},
 			err: template.ErrShInjection,
 		},
